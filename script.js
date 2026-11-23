@@ -283,12 +283,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof renderNotificationBell === 'function') {
             renderNotificationBell();
         }
+        if (typeof renderMySubmissionsView === 'function') {
+            renderMySubmissionsView();
+        }
 
         return { ok: true, row: savedRow };
     }
 
     const VIEW_META = {
         'home-dashboard': { mode: 'home', label: '', parent: null },
+        'my-submissions': { mode: 'home', label: 'Lịch sử nộp bài', parent: 'home-dashboard' },
         'task1-hub': { mode: 'task1', label: 'Danh sách bài học Task 01', parent: 'home-dashboard' },
         'ly-thuyet': { mode: 'task1', label: 'Lý thuyết chung: Viết Thư & Email', parent: 'task1-hub' },
         'khuyen-nghi': { mode: 'task1', label: 'Thư khuyên / đề xuất', parent: 'task1-hub' },
@@ -303,11 +307,70 @@ document.addEventListener('DOMContentLoaded', () => {
         'viet-luan': { mode: 'task2', label: 'Chủ đề 1: Trẻ em & Thiết bị điện tử', parent: 'task2-hub' }
     };
 
+    const DASHBOARD_SIDEBAR_VIEWS = new Set(['home-dashboard', 'task1-hub', 'task2-hub', 'my-submissions']);
+    const sidebarCollapseBtn = document.getElementById('ej-sidebar-collapse-btn');
+    const mobileMenuBtn = document.getElementById('ej-mobile-menu-btn');
+    const sidebarBackdrop = document.getElementById('ej-sidebar-backdrop');
+    const topbarSearchWrap = document.getElementById('ej-topbar-search-wrap');
+    const focusNavGroup = document.getElementById('ej-focus-nav-group');
+    const quickSearchInput = document.getElementById('ej-quick-search-input');
+    const quickSearchDropdown = document.getElementById('ej-search-dropdown');
+    const sidebarItems = document.querySelectorAll('.ej-sb-item[data-sb-view]');
+
     const viewHistory = ['home-dashboard'];
+
+    function closeMobileSidebar() {
+        if (appLayout) {
+            appLayout.classList.remove('mobile-sidebar-open');
+        }
+    }
+
+    // Restore collapsed sidebar preference on desktop
+    try {
+        if (appLayout && localStorage.getItem('vstep_sidebar_collapsed') === '1') {
+            appLayout.classList.add('sidebar-collapsed');
+        }
+    } catch (e) {}
+
+    if (sidebarCollapseBtn && appLayout) {
+        sidebarCollapseBtn.addEventListener('click', () => {
+            const isCollapsed = appLayout.classList.toggle('sidebar-collapsed');
+            try {
+                localStorage.setItem('vstep_sidebar_collapsed', isCollapsed ? '1' : '0');
+            } catch (e) {}
+        });
+    }
+
+    if (mobileMenuBtn && appLayout) {
+        mobileMenuBtn.addEventListener('click', () => {
+            appLayout.classList.toggle('mobile-sidebar-open');
+        });
+    }
+
+    if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+    }
 
     function updateTopbarForView(viewId) {
         const meta = VIEW_META[viewId] || VIEW_META['home-dashboard'];
-        const isHome = viewId === 'home-dashboard';
+        const isDashboardView = DASHBOARD_SIDEBAR_VIEWS.has(viewId);
+
+        // Toggle Focus Lesson Mode (hide sidebar when inside any specific lesson!)
+        if (appLayout) {
+            appLayout.classList.toggle('focus-lesson-mode', !isDashboardView);
+        }
+
+        if (topbarSearchWrap) {
+            topbarSearchWrap.style.display = isDashboardView ? 'flex' : 'none';
+        }
+        if (focusNavGroup) {
+            focusNavGroup.style.display = isDashboardView ? 'none' : 'flex';
+        }
+
+        // Highlight active item in sidebar
+        sidebarItems.forEach(item => {
+            item.classList.toggle('active', item.getAttribute('data-sb-view') === viewId);
+        });
 
         if (brandTagEl && brandTitleEl) {
             if (meta.mode === 'task1') {
@@ -323,18 +386,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (contextDividerEl && contextLabelEl) {
-            const showContext = !isHome && viewId !== 'task1-hub' && viewId !== 'task2-hub';
+            const showContext = !isDashboardView && Boolean(meta.label);
             contextDividerEl.style.display = showContext ? 'inline-block' : 'none';
             contextLabelEl.style.display = showContext ? 'inline-block' : 'none';
             contextLabelEl.textContent = showContext ? meta.label : '';
         }
 
         if (topbarBackBtn) {
-            topbarBackBtn.style.display = isHome ? 'none' : 'inline-flex';
+            topbarBackBtn.style.display = isDashboardView ? 'none' : 'inline-flex';
             if (topbarBackText) {
-                topbarBackText.textContent = (viewId === 'task1-hub' || viewId === 'task2-hub')
-                    ? 'Quay lại 2 Task'
-                    : 'Quay lại';
+                const prevView = viewHistory.length > 1
+                    ? viewHistory[viewHistory.length - 2]
+                    : (meta.parent || 'home-dashboard');
+                if (prevView === 'task1-hub') {
+                    topbarBackText.textContent = 'Danh sách Task 01';
+                } else if (prevView === 'task2-hub') {
+                    topbarBackText.textContent = 'Danh sách Task 02';
+                } else if (prevView === 'my-submissions') {
+                    topbarBackText.textContent = 'Lịch sử nộp bài';
+                } else if (prevView === 'home-dashboard') {
+                    topbarBackText.textContent = 'Tổng quan';
+                } else {
+                    topbarBackText.textContent = 'Quay lại';
+                }
             }
         }
     }
@@ -342,6 +416,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function navigateToView(targetView, options = {}) {
         if (!targetView) return;
         const { fromBack = false } = options;
+
+        closeMobileSidebar();
 
         if (!fromBack) {
             if (targetView === 'home-dashboard') {
@@ -376,13 +452,117 @@ document.addEventListener('DOMContentLoaded', () => {
             adviceMenuBtn.classList.remove('active');
         }
 
-        if (targetView === 'khuyen-nghi' && typeof currentAdvicePromptId !== 'undefined') {
+        if (targetView === 'my-submissions' && typeof renderMySubmissionsView === 'function') {
+            renderMySubmissionsView();
+        } else if (targetView === 'khuyen-nghi' && typeof currentAdvicePromptId !== 'undefined') {
             markReviewAsSeen(getAdviceLessonId(currentAdvicePromptId));
         } else if (targetView === 'viet-luan' && typeof currentEssayTopic !== 'undefined') {
             markReviewAsSeen(currentEssayTopic);
         }
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // --- Quick Search (⌘K) across Task 01 & Task 02 lessons ---
+    const QUICK_SEARCH_CATALOG = [
+        { title: 'Lý thuyết chung: Viết Thư & Email', sub: 'Task 01 · Bố cục 3 phần, văn phong Formal/Informal', tag: 'Task 01', view: 'ly-thuyet' },
+        { title: 'Thư khuyên / đề xuất (5 đề)', sub: 'Mua hàng online (Jay), Hội thảo (Carol), Du lịch Hà Nội, Chuyển nhà, Mùa hè', tag: 'Task 01', view: 'khuyen-nghi' },
+        { title: 'Thư hỏi thông tin (3 đề)', sub: 'Rainbow Language Center, khóa tiếng Anh mùa hè, kỹ năng mềm', tag: 'Task 01', view: 'hoi-thong-tin' },
+        { title: 'Thư cung cấp thông tin (6 đề)', sub: 'Quê hương (John), Hoa (Emily), tiệc chào mừng, chuyến đi, thể thao, tuyển dụng', tag: 'Task 01', view: 'cung-cap-thong-tin' },
+        { title: 'Thư phàn nàn (4 đề)', sub: 'Phòng thay đồ, thiết bị nhà bếp hỏng, đơn hàng Shopee, nhà hàng', tag: 'Task 01', view: 'phan-nan' },
+        { title: 'Thư cho đánh giá / phản hồi (3 đề)', sub: 'Khách sạn, nhà sách, đánh giá sách cho Mia', tag: 'Task 01', view: 'danh-gia' },
+        { title: 'Thư xin lỗi (4 đề)', sub: 'Nộp bài trễ, lỡ hẹn phỏng vấn, dịch vụ khách sạn, trả sách Anna', tag: 'Task 01', view: 'xin-loi' },
+        { title: 'Thư xin việc (3 đề)', sub: 'Trợ lý bán hàng, tình nguyện viên thư viện, kỹ thuật viên phần mềm', tag: 'Task 01', view: 'xin-viec' },
+        { title: 'Lý thuyết chung: Viết Luận (Task 2)', sub: 'Tổng quan 4 dạng bài luận VSTEP', tag: 'Task 02', view: 'task2-ly-thuyet' },
+        { title: 'Chủ đề 1: Trẻ em & Thiết bị điện tử', sub: 'Children & Electronic Devices · Causes & Solutions', tag: 'Task 02', essay: 'children-devices' },
+        { title: 'Chủ đề 2: Thời trang nhanh & Môi trường', sub: 'Fast Fashion & the Environment · Causes & Solutions', tag: 'Task 02', essay: 'fast-fashion' },
+        { title: 'Chủ đề 3: Lựa chọn công việc & Sự hài lòng', sub: 'Choosing a Job & Job Satisfaction · Opinion', tag: 'Task 02', essay: 'choosing-job' },
+        { title: 'Chủ đề 4: Tự kinh doanh / Tự làm chủ', sub: 'Self-Employment · Advantages & Disadvantages', tag: 'Task 02', essay: 'self-employment' },
+        { title: 'Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc', sub: 'Removing Traffic Lights · Opinion', tag: 'Task 02', essay: 'traffic-lights' }
+    ];
+
+    function normalizeSearchText(str) {
+        return String(str || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/đ/g, 'd');
+    }
+
+    function renderQuickSearchResults(query) {
+        if (!quickSearchDropdown) return;
+        const normQ = normalizeSearchText(query).trim();
+        const matches = normQ
+            ? QUICK_SEARCH_CATALOG.filter(item =>
+                normalizeSearchText(`${item.title} ${item.sub} ${item.tag}`).includes(normQ)
+            )
+            : QUICK_SEARCH_CATALOG.slice(0, 8);
+
+        if (matches.length === 0) {
+            quickSearchDropdown.innerHTML = `<div class="ej-search-empty">Không tìm thấy bài học khớp với “${CLOUD ? CLOUD.escapeHtml(query) : query}”.</div>`;
+        } else {
+            const esc = CLOUD ? CLOUD.escapeHtml : (s => String(s || ''));
+            quickSearchDropdown.innerHTML = matches.map((item, idx) => `
+                <button type="button" class="ej-search-result-btn" data-qs-idx="${idx}">
+                    <div>
+                        <div class="ej-search-res-title">${esc(item.title)}</div>
+                        <div class="ej-search-res-sub">${esc(item.sub)}</div>
+                    </div>
+                    <span class="ej-search-res-tag">${esc(item.tag)}</span>
+                </button>
+            `).join('');
+
+            quickSearchDropdown.querySelectorAll('[data-qs-idx]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const chosen = matches[parseInt(btn.getAttribute('data-qs-idx'), 10)];
+                    if (!chosen) return;
+                    quickSearchDropdown.style.display = 'none';
+                    if (quickSearchInput) quickSearchInput.value = '';
+                    if (chosen.essay && typeof selectEssayTopic === 'function') {
+                        selectEssayTopic(chosen.essay);
+                        navigateToView('viet-luan');
+                    } else if (chosen.view) {
+                        navigateToView(chosen.view);
+                    }
+                });
+            });
+        }
+        quickSearchDropdown.style.display = 'block';
+    }
+
+    if (quickSearchInput && quickSearchDropdown) {
+        quickSearchInput.addEventListener('focus', () => {
+            renderQuickSearchResults(quickSearchInput.value);
+        });
+        quickSearchInput.addEventListener('input', () => {
+            renderQuickSearchResults(quickSearchInput.value);
+        });
+        quickSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                quickSearchDropdown.style.display = 'none';
+                quickSearchInput.blur();
+            } else if (e.key === 'Enter') {
+                const firstBtn = quickSearchDropdown.querySelector('.ej-search-result-btn');
+                if (firstBtn) {
+                    e.preventDefault();
+                    firstBtn.click();
+                }
+            }
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#ej-topbar-search-wrap')) {
+                quickSearchDropdown.style.display = 'none';
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+                if (topbarSearchWrap && topbarSearchWrap.style.display !== 'none') {
+                    e.preventDefault();
+                    quickSearchInput.focus();
+                    renderQuickSearchResults(quickSearchInput.value);
+                }
+            }
+        });
     }
 
     function goBackView() {
@@ -2463,6 +2643,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 authState.reviewsByLessonId = map;
                 renderNotificationBell();
+                renderMySubmissionsView();
                 renderTeacherFeedbackBox(adviceTeacherFeedbackBox, getCloudSubmission(getAdviceLessonId(currentAdvicePromptId)));
                 renderTeacherFeedbackBox(essayTeacherFeedbackBox, getCloudSubmission(currentEssayTopic));
             }
@@ -2507,6 +2688,89 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function renderMySubmissionsView() {
+        const listEl = document.getElementById('my-submissions-list');
+        const headingEl = document.getElementById('my-submissions-heading');
+        const sbCountEl = document.getElementById('sb-submissions-count');
+        const subs = Object.values(authState.submissionsByLessonId || {})
+            .filter(s => s && s.is_submitted)
+            .sort((a, b) => new Date(b.submitted_at || b.updated_at || 0).getTime() - new Date(a.submitted_at || a.updated_at || 0).getTime());
+
+        if (sbCountEl) {
+            sbCountEl.textContent = String(subs.length);
+            sbCountEl.style.display = subs.length > 0 ? 'inline-block' : 'none';
+        }
+        if (headingEl) {
+            headingEl.textContent = `Bài viết đã nộp · ${subs.length} bài`;
+        }
+        if (!listEl || !CLOUD) return;
+
+        if (subs.length === 0) {
+            listEl.innerHTML = `
+                <div class="ej-history-empty">
+                    <p style="font-size:15.5px;font-weight:700;color:#18181B;margin-bottom:6px;">Bạn chưa nộp bài viết nào.</p>
+                    <p style="font-size:13.5px;margin-bottom:16px;">Hãy chọn một đề ở Task 01 (Viết Thư) hoặc Task 02 (Viết Luận) để viết và nộp bài nhé!</p>
+                    <button type="button" class="nb-back-btn" id="btn-empty-go-task1">Vào luyện Task 01 →</button>
+                </div>
+            `;
+            const emptyBtn = document.getElementById('btn-empty-go-task1');
+            if (emptyBtn) {
+                emptyBtn.onclick = () => navigateToView('task1-hub');
+            }
+            return;
+        }
+
+        const esc = CLOUD.escapeHtml;
+        const fmtTime = CLOUD.formatDateTime;
+
+        listEl.innerHTML = subs.map(sub => {
+            const title = getCatalogLessonTitle(sub.lesson_id, sub.lesson_title || sub.lesson_id);
+            const rev = getReleasedReview(sub.lesson_id);
+            const isTask1 = sub.task_type === 'task1';
+            const taskBadgeStyle = isTask1
+                ? 'background:#FEF3C7;color:#92400E;border:1px solid #F59E0B;'
+                : 'background:#EEF2FF;color:#3730A3;border:1px solid #818CF8;';
+            const hasTeacherGrade = Boolean((sub.teacher_score && sub.teacher_score.trim()) || (sub.teacher_feedback && sub.teacher_feedback.trim()));
+
+            let statusPillHtml = '';
+            if (rev) {
+                const isUnread = !rev.student_seen_at;
+                statusPillHtml = isUnread
+                    ? `<span class="notif-item-tag new-dot">Mới · Đã có bài sửa</span>`
+                    : `<span class="notif-item-tag">✅ Đã có bài sửa</span>`;
+            } else {
+                const relAt = sub.ai_release_at || (sub.submitted_at ? new Date(new Date(sub.submitted_at).getTime() + 12 * 60 * 60 * 1000).toISOString() : '');
+                const remain = relAt ? CLOUD.formatRemainingTime(relAt) : '';
+                statusPillHtml = remain
+                    ? `<span class="notif-item-tag" style="background:#FEF3C7;color:#92400E;">⏳ Trả bài sửa sau ${esc(remain)}</span>`
+                    : `<span class="notif-item-tag" style="background:#F4F4F5;color:#3F3F46;">Đang xử lý bài sửa</span>`;
+            }
+
+            return `
+                <div class="ej-history-card">
+                    <div class="ej-history-left">
+                        <div class="ej-history-badges">
+                            <span style="font-size:11px;font-weight:700;padding:2px 8px;${taskBadgeStyle}">${isTask1 ? 'Task 01' : 'Task 02'}</span>
+                            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:2px 7px;background:#F4F4F5;color:#18181B;">Level ${esc(sub.target_level || 'B1')} · ${sub.word_count || 0} từ</span>
+                            ${statusPillHtml}
+                            ${hasTeacherGrade ? `<span class="notif-item-tag">👨‍🏫 GV đã nhận xét${sub.teacher_score ? ` (${esc(sub.teacher_score)})` : ''}</span>` : ''}
+                        </div>
+                        <div class="ej-history-title">${esc(title)}</div>
+                        <div class="ej-history-meta">Đã nộp lúc ${esc(fmtTime(sub.submitted_at || sub.updated_at))}</div>
+                    </div>
+                    <button type="button" class="nb-back-btn" data-history-open-lesson="${esc(sub.lesson_id)}">
+                        <span>${rev ? 'Xem bài sửa' : 'Mở bài viết'}</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        listEl.querySelectorAll('[data-history-open-lesson]').forEach(btn => {
+            btn.onclick = () => openLessonFromNotification(btn.getAttribute('data-history-open-lesson'));
+        });
+    }
+
     function syncTopbarAccountUI() {
         if (!currentAccount) {
             if (topbarTeacherLink) topbarTeacherLink.style.display = 'none';
@@ -2527,11 +2791,13 @@ document.addEventListener('DOMContentLoaded', () => {
             topbarUserName.textContent = currentAccount.name || currentAccount.email;
         }
         renderNotificationBell();
+        renderMySubmissionsView();
     }
 
     function hydrateWritingViewsFromCloud() {
         selectAdvicePrompt(currentAdvicePromptId, { skipScroll: true });
         selectEssayTopic(currentEssayTopic, { skipResetTimer: true, skipScroll: true });
+        renderMySubmissionsView();
     }
 
     async function handleSignOut(askConfirm = false) {

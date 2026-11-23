@@ -5962,3 +5962,647 @@ mark.idea-hl {
     border-radius: 6px;
     user-select: none;
 }
+
+/* ==========================================================================
+   NEO-BRUTALIST SIDEBAR SHELL & FOCUS LESSON MODE
+   (Inspired by theenglishjourneyapp.com/dashboard/khoa-hoc/A1-A2-FOUNDATION)
+   ========================================================================== */
+
+.app-layout {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+    width: 100%;
+    background: #FAFAFA;
+}
+
+.ej-main-shell {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: #FAFAFA;
+}
+
+.app-layout.split-tab-active .ej-main-shell {
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Topbar height alignment with sidebar header */
+.dt-topbar {
+    height: 60px;
+    min-height: 60px;
+}
+
+.app-layout.focus-lesson-mode .dt-topbar {
+    height: 54px;
+    min-height: 54px;
+}
+
+/* Left Fixed Sidebar */
+.ej-sidebar {
+    width: 248px;
+    flex: 0 0 248px;
+    background: #FFFFFF;
+    border-right: 2px solid #18181B;
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    z-index: 260;
+    transition: width 0.18s ease, flex-basis 0.18s ease;
+}
+
+.ej-sidebar-backdrop {
+    display: none;
+}
+
+/* Focus Lesson Mode: completely hide sidebar for 100% content focus */
+.app-layout.focus-lesson-mode .ej-sidebar,
+.app-layout.focus-lesson-mode .ej-sidebar-backdrop,
+.app-layout.focus-lesson-mode .ej-mobile-menu-btn {
+    display: none !important;
+}
+
+.app-layout.focus-lesson-mode .ej-main-shell {
+    width: 100%;
+}
+
+/* Sidebar Brand Header */
+.ej-sidebar-header {
+    height: 60px;
+    min-height: 60px;
+    padding: 0 16px;
+    border-bottom: 2px solid #18181B;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    background: #FFFFFF;
+    flex-shrink: 0;
+}
+
+.ej-sb-logo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    min-width: 0;
+}
+
+.ej-sb-logo-badge {
+    width: 34px;
+    height: 34px;
+    background: #FFE55C;
+    border: 2px solid #18181B;
+    box-shadow: 2px 2px 0px #18181B;
+    color: #18181B;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ej-sb-logo-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+    overflow: hidden;
+}
+
+.ej-sb-logo-sub {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: #71717A;
+    text-transform: uppercase;
+}
+
+.ej-sb-logo-main {
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0.01em;
+    color: #18181B;
+    white-space: nowrap;
+}
+
+/* Square Collapse Button sitting on sidebar border intersection */
+.ej-sidebar-collapse-btn {
+    position: absolute;
+    right: -15px;
+    bottom: -15px;
+    width: 28px;
+    height: 28px;
+    background: #FFFFFF;
+    border: 2px solid #18181B;
+    box-shadow: 2px 2px 0px #18181B;
+    color: #18181B;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 300;
+    transition: background-color 0.12s ease, transform 0.12s ease;
+}
+
+.ej-sidebar-collapse-btn:hover {
+    background: #FFE55C;
+}
+
+/* Sidebar Navigation Scroll Area */
+.ej-sidebar-nav {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 12px 28px;
+    display: flex;
+    flex-direction: column;
+}
+
+.ej-sidebar-nav::-webkit-scrollbar {
+    width: 5px;
+}
+
+.ej-sidebar-nav::-webkit-scrollbar-thumb {
+    background: #D4D4D8;
+    border-radius: 3px;
+}
+
+.ej-sb-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.ej-sb-section-label {
+    padding: 16px 10px 6px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: #71717A;
+    text-transform: uppercase;
+}
+
+.ej-sb-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: #18181B;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.ej-sb-item:hover {
+    background: #F4F4F5;
+}
+
+.ej-sb-item.active {
+    background: #FFE55C;
+    border: 2px solid #18181B;
+    box-shadow: 2px 2px 0px #18181B;
+    color: #18181B;
+    font-weight: 800;
+}
+
+.ej-sb-ico {
+    width: 18px;
+    text-align: center;
+    font-size: 14px;
+    color: #27272A;
+    flex-shrink: 0;
+}
+
+.ej-sb-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ej-sb-count {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 1px 6px;
+    background: #18181B;
+    color: #FFFFFF;
+    flex-shrink: 0;
+}
+
+/* Sub-items vertical rail tree */
+.ej-sb-tree {
+    margin: 3px 0 6px 19px;
+    padding-left: 13px;
+    border-left: 1.5px solid #D4D4D8;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ej-sb-subitem {
+    width: 100%;
+    padding: 6px 9px;
+    border: none;
+    background: transparent;
+    color: #52525B;
+    font-family: inherit;
+    font-size: 12.8px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 4px;
+    line-height: 1.35;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.ej-sb-subitem:hover {
+    background: #F4F4F5;
+    color: #18181B;
+    font-weight: 600;
+}
+
+/* Collapsed Desktop Icon Rail State */
+.app-layout.sidebar-collapsed .ej-sidebar {
+    width: 68px;
+    flex: 0 0 68px;
+}
+
+.app-layout.sidebar-collapsed .ej-sb-logo-text,
+.app-layout.sidebar-collapsed .ej-sb-label,
+.app-layout.sidebar-collapsed .ej-sb-count,
+.app-layout.sidebar-collapsed .ej-sb-section-label,
+.app-layout.sidebar-collapsed .ej-sb-tree {
+    display: none;
+}
+
+.app-layout.sidebar-collapsed .ej-sidebar-header {
+    justify-content: center;
+    padding: 0;
+}
+
+.app-layout.sidebar-collapsed .ej-sb-item {
+    justify-content: center;
+    padding: 10px 0;
+}
+
+/* Topbar Quick Search Input (Neo-Brutalist) */
+.ej-topbar-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 370px;
+    max-width: 100%;
+    height: 38px;
+    padding: 0 10px 0 12px;
+    background: #FFFFFF;
+    border: 2px solid #18181B;
+    transition: box-shadow 0.12s ease;
+}
+
+.ej-topbar-search-wrap:focus-within {
+    box-shadow: 2px 2px 0px #18181B;
+}
+
+.ej-search-ico {
+    font-size: 13px;
+    color: #71717A;
+    flex-shrink: 0;
+}
+
+.ej-quick-search-input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: #18181B;
+}
+
+.ej-quick-search-input::placeholder {
+    color: #71717A;
+}
+
+.ej-search-kbd {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border: 1px solid #D4D4D8;
+    background: #F4F4F5;
+    color: #71717A;
+    flex-shrink: 0;
+}
+
+.ej-search-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: -2px;
+    right: -2px;
+    background: #FFFFFF;
+    border: 2px solid #18181B;
+    box-shadow: 4px 4px 0px #18181B;
+    z-index: 500;
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.ej-search-result-btn {
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-bottom: 1px solid #F4F4F5;
+    background: #FFFFFF;
+    padding: 10px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-family: inherit;
+}
+
+.ej-search-result-btn:last-child {
+    border-bottom: none;
+}
+
+.ej-search-result-btn:hover {
+    background: #FEF9C3;
+}
+
+.ej-search-res-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #18181B;
+}
+
+.ej-search-res-sub {
+    font-size: 11.5px;
+    color: #71717A;
+    margin-top: 2px;
+}
+
+.ej-search-res-tag {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border: 1.5px solid #18181B;
+    background: #F4F4F5;
+    color: #18181B;
+    white-space: nowrap;
+}
+
+.ej-search-empty {
+    padding: 14px 12px;
+    font-size: 12.8px;
+    color: #71717A;
+    text-align: center;
+}
+
+/* Focus Lesson Topbar Left Group */
+.ej-focus-nav-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+/* Neo-Brutalist Square Bell & Account Button (Matching Screenshot) */
+.dt-topbar .notif-bell-btn {
+    width: 38px;
+    height: 38px;
+    border: 2px solid #18181B;
+    border-radius: 0;
+    background: #FFFFFF;
+    box-shadow: 2px 2px 0px #18181B;
+}
+
+.dt-topbar .notif-bell-btn.has-unread {
+    background: #FFE55C;
+}
+
+.dt-topbar .user-account-pill {
+    height: 38px;
+    border: 2px solid #18181B;
+    border-radius: 0;
+    background: #FFFFFF;
+    box-shadow: 2px 2px 0px #18181B;
+    padding: 0 12px 0 7px;
+}
+
+.dt-topbar .user-account-pill:hover {
+    background: #FAFAFA;
+}
+
+.dt-topbar .user-initials {
+    width: 24px;
+    height: 24px;
+    border-radius: 0;
+    border: 1.5px solid #18181B;
+    background: #FFE55C;
+    color: #18181B;
+}
+
+.dt-topbar .top-pill-btn.teacher-nav-pill {
+    height: 38px;
+    border: 2px solid #18181B;
+    border-radius: 0;
+    box-shadow: 2px 2px 0px #18181B;
+}
+
+.app-layout.focus-lesson-mode .dt-topbar .notif-bell-btn,
+.app-layout.focus-lesson-mode .dt-topbar .user-account-pill,
+.app-layout.focus-lesson-mode .dt-topbar .top-pill-btn.teacher-nav-pill {
+    height: 34px;
+}
+
+.app-layout.focus-lesson-mode .dt-topbar .notif-bell-btn {
+    width: 34px;
+}
+
+/* Mobile Menu Hamburger */
+.ej-mobile-menu-btn {
+    display: none;
+    width: 38px;
+    height: 38px;
+    border: 2px solid #18181B;
+    background: #FFFFFF;
+    box-shadow: 2px 2px 0px #18181B;
+    color: #18181B;
+    font-size: 15px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.ej-mobile-menu-btn:hover {
+    background: #FFE55C;
+}
+
+/* Student Submissions History View (#my-submissions) */
+#my-submissions {
+    background: #FAFAFA;
+    min-height: calc(100vh - 60px);
+}
+
+.ej-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.ej-history-card {
+    background: #FFFFFF;
+    border: 2px solid #18181B;
+    box-shadow: 4px 4px 0px #18181B;
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.ej-history-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 240px;
+    flex: 1;
+}
+
+.ej-history-badges {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ej-history-title {
+    font-size: 15.5px;
+    font-weight: 800;
+    color: #18181B;
+}
+
+.ej-history-meta {
+    font-size: 12.8px;
+    color: #52525B;
+    font-weight: 400;
+}
+
+.ej-history-empty {
+    padding: 40px 24px;
+    text-align: center;
+    background: #FFFFFF;
+    border: 2px dashed #D4D4D8;
+    color: #52525B;
+}
+
+/* Dashboard content area polish (edge-to-edge #FAFAFA next to Sidebar) */
+.content-area:has(#home-dashboard.active),
+.content-area:has(#task1-hub.active),
+.content-area:has(#task2-hub.active),
+.content-area:has(#my-submissions.active) {
+    padding: 0 !important;
+    background: #FAFAFA;
+}
+
+.content-area:has(#home-dashboard.active) .container-tab,
+.content-area:has(#task1-hub.active) .container-tab,
+.content-area:has(#task2-hub.active) .container-tab,
+.content-area:has(#my-submissions.active) .container-tab {
+    max-width: 100%;
+    margin: 0;
+}
+
+#home-dashboard,
+#task1-hub,
+#task2-hub,
+#my-submissions {
+    min-height: calc(100vh - 60px);
+}
+
+/* Responsive Tablet & Mobile Sidebar Drawer */
+@media (max-width: 960px) {
+    .dt-topbar {
+        height: 56px !important;
+        min-height: 56px !important;
+    }
+
+    .dt-topbar-inner {
+        flex-wrap: nowrap !important;
+        padding: 0 14px !important;
+    }
+
+    .ej-mobile-menu-btn {
+        display: inline-flex;
+    }
+
+    .ej-sidebar-collapse-btn {
+        display: none;
+    }
+
+    .ej-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 268px;
+        flex: none;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+        z-index: 420;
+        box-shadow: 6px 0 24px rgba(0, 0, 0, 0.16);
+    }
+
+    .app-layout.mobile-sidebar-open .ej-sidebar {
+        transform: translateX(0);
+    }
+
+    .app-layout.mobile-sidebar-open .ej-sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(24, 24, 27, 0.42);
+        z-index: 400;
+    }
+
+    .ej-topbar-search-wrap {
+        width: 220px;
+    }
+
+    .ej-search-kbd {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .ej-topbar-search-wrap {
+        display: none;
+    }
+}

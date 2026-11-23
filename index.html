@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=2.8">
+    <link rel="stylesheet" href="style.css?v=3.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -17,55 +17,145 @@
     <div id="writing-auth-gate"></div>
 
     <div class="app-layout" id="main-app-layout" style="display: none;">
-        <!-- Minimal Clean Top Navigation Bar -->
-        <header class="dt-topbar">
-            <div class="dt-topbar-inner">
-                <div class="dt-topbar-left-group">
-                    <button type="button" class="dt-topbar-brand dt-brand-btn" id="topbar-home-btn" data-open-view="home-dashboard" title="Về màn hình chọn 2 Task">
-                        <span class="dt-brand-badge"><i class="fas fa-pen-nib"></i></span>
-                        <div class="dt-brand-meta">
-                            <span class="dt-brand-tag" id="topbar-brand-tag">VSTEP WRITING · B1 – B2</span>
-                            <span class="dt-brand-title" id="topbar-brand-title">Viết Thư &amp; Viết Luận</span>
-                        </div>
-                    </button>
+        <!-- Mobile Sidebar Backdrop -->
+        <div class="ej-sidebar-backdrop" id="ej-sidebar-backdrop"></div>
 
-                    <span class="dt-topbar-divider" id="topbar-context-divider" style="display: none;" aria-hidden="true"></span>
-                    <span class="dt-topbar-context" id="topbar-context-label" style="display: none;"></span>
+        <!-- Neo-Brutalist Left Sidebar (Automatically Hidden Inside Specific Lessons) -->
+        <aside class="ej-sidebar" id="ej-sidebar" aria-label="Điều hướng khóa học">
+            <div class="ej-sidebar-header">
+                <button type="button" class="ej-sb-logo-btn" data-open-view="home-dashboard" title="Về Tổng quan">
+                    <span class="ej-sb-logo-badge"><i class="fas fa-pen-nib"></i></span>
+                    <div class="ej-sb-logo-text">
+                        <span class="ej-sb-logo-sub">VSTEP</span>
+                        <span class="ej-sb-logo-main">WRITING B1–B2</span>
+                    </div>
+                </button>
+                <button type="button" class="ej-sidebar-collapse-btn" id="ej-sidebar-collapse-btn" title="Thu gọn / Mở rộng thanh điều hướng" aria-label="Thu gọn thanh điều hướng">
+                    <i class="fas fa-columns"></i>
+                </button>
+            </div>
+
+            <nav class="ej-sidebar-nav">
+                <div class="ej-sb-group">
+                    <button type="button" class="ej-sb-item active" data-open-view="home-dashboard" data-sb-view="home-dashboard" title="Tổng quan">
+                        <i class="fas fa-th-large ej-sb-ico"></i>
+                        <span class="ej-sb-label">Tổng quan</span>
+                    </button>
+                    <button type="button" class="ej-sb-item" data-open-view="my-submissions" data-sb-view="my-submissions" title="Lịch sử nộp bài">
+                        <i class="far fa-clock ej-sb-ico"></i>
+                        <span class="ej-sb-label">Lịch sử nộp bài</span>
+                        <span class="ej-sb-count" id="sb-submissions-count" style="display: none;">0</span>
+                    </button>
                 </div>
 
-                <div class="dt-topbar-right-group">
-                    <a href="./teacher.html" class="top-pill-btn teacher-nav-pill" id="topbar-teacher-link" style="display: none;">
-                        👨‍🏫 Quản lý &amp; Xem bài học viên
-                    </a>
-                    <div class="notif-menu-wrap" id="topbar-notif-wrap" style="display: none;">
-                        <button type="button" class="notif-bell-btn" id="topbar-notif-btn" title="Thông báo bài sửa" aria-expanded="false">
-                            <i class="far fa-bell"></i>
-                            <span class="notif-unread-badge" id="topbar-notif-badge" style="display: none;">0</span>
+                <div class="ej-sb-section-label">TASK 01 · VIẾT THƯ</div>
+                <div class="ej-sb-group">
+                    <button type="button" class="ej-sb-item" data-open-view="task1-hub" data-sb-view="task1-hub" title="Danh sách Task 01">
+                        <i class="far fa-envelope ej-sb-ico"></i>
+                        <span class="ej-sb-label">Tất cả bài Task 01</span>
+                    </button>
+                    <div class="ej-sb-tree">
+                        <button type="button" class="ej-sb-subitem" data-open-view="ly-thuyet">Lý thuyết chung</button>
+                        <button type="button" class="ej-sb-subitem" data-open-view="khuyen-nghi">Thư khuyên / đề xuất</button>
+                        <button type="button" class="ej-sb-subitem" data-open-view="hoi-thong-tin">Thư hỏi thông tin</button>
+                        <button type="button" class="ej-sb-subitem" data-open-view="cung-cap-thong-tin">Thư cung cấp thông tin</button>
+                        <button type="button" class="ej-sb-subitem" data-open-view="phan-nan">Thư phàn nàn</button>
+                        <button type="button" class="ej-sb-subitem" data-open-view="danh-gia">Thư cho đánh giá</button>
+                        <button type="button" class="ej-sb-subitem" data-open-view="xin-loi">Thư xin lỗi</button>
+                        <button type="button" class="ej-sb-subitem" data-open-view="xin-viec">Thư xin việc</button>
+                    </div>
+                </div>
+
+                <div class="ej-sb-section-label">TASK 02 · VIẾT LUẬN</div>
+                <div class="ej-sb-group">
+                    <button type="button" class="ej-sb-item" data-open-view="task2-hub" data-sb-view="task2-hub" title="Danh sách Task 02">
+                        <i class="far fa-file-alt ej-sb-ico"></i>
+                        <span class="ej-sb-label">Tất cả bài Task 02</span>
+                    </button>
+                    <div class="ej-sb-tree">
+                        <button type="button" class="ej-sb-subitem" data-open-view="task2-ly-thuyet">Lý thuyết chung</button>
+                        <button type="button" class="ej-sb-subitem" data-open-essay="children-devices">CĐ 1: Trẻ em &amp; Thiết bị</button>
+                        <button type="button" class="ej-sb-subitem" data-open-essay="fast-fashion">CĐ 2: Thời trang nhanh</button>
+                        <button type="button" class="ej-sb-subitem" data-open-essay="choosing-job">CĐ 3: Lựa chọn công việc</button>
+                        <button type="button" class="ej-sb-subitem" data-open-essay="self-employment">CĐ 4: Tự làm chủ</button>
+                        <button type="button" class="ej-sb-subitem" data-open-essay="traffic-lights">CĐ 5: Bỏ đèn giao thông</button>
+                    </div>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Workspace Column (Topbar + Content) -->
+        <div class="ej-main-shell">
+            <!-- Top Navigation Bar -->
+            <header class="dt-topbar">
+                <div class="dt-topbar-inner">
+                    <div class="dt-topbar-left-group">
+                        <!-- Mobile Hamburger (Dashboard views on small screens) -->
+                        <button type="button" class="ej-mobile-menu-btn" id="ej-mobile-menu-btn" title="Mở thanh điều hướng" aria-label="Mở menu">
+                            <i class="fas fa-bars"></i>
                         </button>
-                        <div class="notif-dropdown" id="topbar-notif-dropdown" style="display: none;">
-                            <div class="notif-dropdown-header">
-                                <span>Thông báo bài sửa</span>
-                                <span class="notif-header-sub" id="topbar-notif-sub">Trả sau 12 tiếng</span>
-                            </div>
-                            <div class="notif-dropdown-list" id="topbar-notif-list"></div>
+
+                        <!-- Quick Search Bar (Visible in Dashboard / Hub views with Sidebar) -->
+                        <div class="ej-topbar-search-wrap" id="ej-topbar-search-wrap">
+                            <i class="fas fa-search ej-search-ico"></i>
+                            <input
+                                type="text"
+                                id="ej-quick-search-input"
+                                class="ej-quick-search-input"
+                                placeholder="Tìm nhanh bài học, dạng thư, chủ đề luận..."
+                                autocomplete="off"
+                            />
+                            <kbd class="ej-search-kbd">⌘K</kbd>
+                            <div class="ej-search-dropdown" id="ej-search-dropdown" style="display: none;"></div>
+                        </div>
+
+                        <!-- Focus Lesson Header (Visible ONLY inside a specific lesson when Sidebar disappears) -->
+                        <div class="ej-focus-nav-group" id="ej-focus-nav-group" style="display: none;">
+                            <button type="button" class="nb-back-btn" id="topbar-back-btn">
+                                <i class="fas fa-arrow-left"></i>
+                                <span id="topbar-back-text">Quay lại</span>
+                            </button>
+                            <button type="button" class="dt-topbar-brand dt-brand-btn" id="topbar-home-btn" data-open-view="home-dashboard" title="Về trang Tổng quan">
+                                <span class="dt-brand-badge"><i class="fas fa-pen-nib"></i></span>
+                                <div class="dt-brand-meta">
+                                    <span class="dt-brand-tag" id="topbar-brand-tag">VSTEP WRITING · B1 – B2</span>
+                                    <span class="dt-brand-title" id="topbar-brand-title">Viết Thư &amp; Viết Luận</span>
+                                </div>
+                            </button>
+                            <span class="dt-topbar-divider" id="topbar-context-divider" style="display: none;" aria-hidden="true"></span>
+                            <span class="dt-topbar-context" id="topbar-context-label" style="display: none;"></span>
                         </div>
                     </div>
-                    <button type="button" class="user-account-pill" id="topbar-account-pill" style="display: none;" title="Bấm để đăng xuất">
-                        <span class="user-initials" id="topbar-user-initials">HV</span>
-                        <span id="topbar-user-name">Học viên</span>
-                        <span class="topbar-logout-hint">· Đăng xuất</span>
-                    </button>
-                    <button type="button" class="nb-back-btn" id="topbar-back-btn" style="display: none;">
-                        <i class="fas fa-arrow-left"></i>
-                        <span id="topbar-back-text">Quay lại</span>
-                    </button>
-                </div>
-            </div>
-        </header>
 
-        <!-- Main Content Area (Full Width) -->
-        <main class="content-area">
-            <div class="container-tab">
+                    <div class="dt-topbar-right-group">
+                        <a href="./teacher.html" class="top-pill-btn teacher-nav-pill" id="topbar-teacher-link" style="display: none;">
+                            👨‍🏫 Quản lý &amp; Xem bài học viên
+                        </a>
+                        <div class="notif-menu-wrap" id="topbar-notif-wrap" style="display: none;">
+                            <button type="button" class="notif-bell-btn" id="topbar-notif-btn" title="Thông báo bài sửa" aria-expanded="false">
+                                <i class="far fa-bell"></i>
+                                <span class="notif-unread-badge" id="topbar-notif-badge" style="display: none;">0</span>
+                            </button>
+                            <div class="notif-dropdown" id="topbar-notif-dropdown" style="display: none;">
+                                <div class="notif-dropdown-header">
+                                    <span>Thông báo bài sửa</span>
+                                    <span class="notif-header-sub" id="topbar-notif-sub">Trả sau 12 tiếng</span>
+                                </div>
+                                <div class="notif-dropdown-list" id="topbar-notif-list"></div>
+                            </div>
+                        </div>
+                        <button type="button" class="user-account-pill" id="topbar-account-pill" style="display: none;" title="Bấm để đăng xuất">
+                            <span class="user-initials" id="topbar-user-initials">HV</span>
+                            <span id="topbar-user-name">Học viên</span>
+                            <span class="topbar-logout-hint">· Đăng xuất</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main Content Area -->
+            <main class="content-area">
+                <div class="container-tab">
 
                 <!-- ==================== HOME DASHBOARD: CHỌN 2 TASK ==================== -->
                 <div class="tab-content active" id="home-dashboard">
@@ -416,6 +506,24 @@
                                 </div>
                             </button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ==================== LỊCH SỬ NỘP BÀI CỦA TÔI ==================== -->
+                <div class="tab-content" id="my-submissions">
+                    <div class="nb-page-container">
+                        <header class="nb-course-header">
+                            <div class="nb-course-code">VSTEP-WRITING-HISTORY</div>
+                            <h1 class="nb-course-title">LỊCH SỬ NỘP BÀI &amp; BÀI SỬA</h1>
+                            <p class="nb-course-subtitle">Theo dõi các bài viết Task 01 &amp; Task 02 bạn đã nộp, thời gian trả bài sửa sau 12 tiếng và xem lại nhận xét chi tiết.</p>
+                        </header>
+
+                        <div class="nb-section-bar">
+                            <h2 class="nb-section-title" id="my-submissions-heading">Bài viết đã nộp</h2>
+                            <span class="nb-section-meta">Tự động đồng bộ Supabase</span>
+                        </div>
+
+                        <div id="my-submissions-list" class="ej-history-list"></div>
                     </div>
                 </div>
 
@@ -6235,14 +6343,13 @@
                     </div>
                 </div>
 
-            </div>
-
-
-        </main>
+                </div>
+            </main>
+        </div>
     </div>
 
-    <script src="supabase-config.js?v=2.9"></script>
-    <script src="supabase-client.js?v=2.9"></script>
-    <script src="script.js?v=2.9"></script>
+    <script src="supabase-config.js?v=3.0"></script>
+    <script src="supabase-client.js?v=3.0"></script>
+    <script src="script.js?v=3.0"></script>
 </body>
 </html>
