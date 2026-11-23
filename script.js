@@ -385,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (viewId === 'task1-hub') {
                 dashboardCrumbEl.textContent = 'Task 01 · 8 bài học';
             } else if (viewId === 'task2-hub') {
-                dashboardCrumbEl.textContent = 'Task 02 · 7 mục';
+                dashboardCrumbEl.textContent = 'Task 02 · 8 mục';
             } else if (viewId === 'my-submissions') {
                 dashboardCrumbEl.textContent = 'Bài viết đã nộp';
             } else {
@@ -505,7 +505,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: 'Chủ đề 3: Lựa chọn công việc & Sự hài lòng', sub: 'Choosing a Job & Job Satisfaction · Opinion', tag: 'Task 02', essay: 'choosing-job' },
         { title: 'Chủ đề 4: Tự kinh doanh / Tự làm chủ', sub: 'Self-Employment · Advantages & Disadvantages', tag: 'Task 02', essay: 'self-employment' },
         { title: 'Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc', sub: 'Removing Traffic Lights · Opinion', tag: 'Task 02', essay: 'traffic-lights' },
-        { title: 'Chủ đề 6: Sự gia tăng lượng khách du lịch', sub: 'Growth in Tourist Numbers · Advantages & Disadvantages', tag: 'Task 02', essay: 'tourism-growth' }
+        { title: 'Chủ đề 6: Sự gia tăng lượng khách du lịch', sub: 'Growth in Tourist Numbers · Advantages & Disadvantages', tag: 'Task 02', essay: 'tourism-growth' },
+        { title: 'Chủ đề 7: Người trẻ bỏ phố về quê', sub: 'Leaving Cities for Rural Hometowns · Advantages & Disadvantages', tag: 'Task 02', essay: 'leaving-cities' }
     ];
 
     function normalizeSearchText(str) {
@@ -2229,6 +2230,11 @@ document.addEventListener('DOMContentLoaded', () => {
             title: 'Chủ đề 6: Sự gia tăng lượng khách du lịch',
             storageKey: 'vstep_essay_tourism_growth_draft',
             prompt: "In recent years, many popular destinations around the world have experienced a significant rise in the number of tourists visiting each year. While this growth in tourism brings notable economic benefits to local communities, it also raises a number of concerns regarding the environment and the quality of life for residents. Discuss the advantages and disadvantages of this increase in tourist numbers."
+        },
+        'leaving-cities': {
+            title: 'Chủ đề 7: Người trẻ bỏ phố về quê',
+            storageKey: 'vstep_essay_leaving_cities_draft',
+            prompt: "In recent years, an increasing number of young people have chosen to leave big cities and return to their rural hometowns to live and work. This growing trend has sparked debate about whether moving back to the countryside truly benefits young people or creates new challenges for them. Discuss the advantages and disadvantages of young people leaving cities to return to their hometowns."
         }
     };
 
