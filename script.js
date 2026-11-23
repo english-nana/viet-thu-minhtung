@@ -3,47 +3,161 @@ document.addEventListener('DOMContentLoaded', () => {
     let isHighlightModeActive = false;
     let justHighlighted = false;
 
-    // --- 1. Interactive Phrases Translation Logic ---
-    const phrases = document.querySelectorAll('.interactive-phrase');
+    // --- Shared Runtime Helpers (Resizer, Countdown Timer, Debounced Draft Saver) ---
+    function attachSplitResizer(resizerEl, workspaceEl, minPct, maxPct) {
+        if (!resizerEl || !workspaceEl) return;
+        let rafId = null;
+        let latestX = 0;
 
-    phrases.forEach(phrase => {
-        // Create the translation box inside each phrase
-        const translationText = phrase.getAttribute('data-vi');
-        if (translationText) {
-            // Check if it already has one to prevent duplicate appends
-            if (!phrase.querySelector('.translation-box')) {
-                const transBox = document.createElement('div');
-                transBox.className = 'translation-box';
-                transBox.textContent = translationText;
-                
-                // Append to the phrase element
-                phrase.appendChild(transBox);
+        const applyWidth = () => {
+            rafId = null;
+            const rect = workspaceEl.getBoundingClientRect();
+            if (rect.width <= 0) return;
+            let pct = ((latestX - rect.left) / rect.width) * 100;
+            pct = Math.max(minPct, Math.min(maxPct, pct));
+            workspaceEl.style.setProperty('--left-pane-width', `${pct.toFixed(1)}%`);
+        };
+
+        const onMouseMove = (e) => {
+            latestX = e.clientX;
+            if (!rafId) {
+                rafId = requestAnimationFrame(applyWidth);
             }
+        };
+
+        const onMouseUp = () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+            resizerEl.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+
+        resizerEl.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            resizerEl.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        });
+    }
+
+    function bindCountdownTimer(btnEl, displayEl, defaultSec, warnSec) {
+        if (!btnEl || !displayEl) return;
+        let remainingSec = defaultSec;
+        let timerInterval = null;
+
+        const render = () => {
+            const m = Math.floor(remainingSec / 60).toString().padStart(2, '0');
+            const s = (remainingSec % 60).toString().padStart(2, '0');
+            displayEl.textContent = `${m}:${s}`;
+        };
+
+        btnEl.addEventListener('click', () => {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                btnEl.classList.remove('running');
+                return;
+            }
+            if (remainingSec <= 0) {
+                remainingSec = defaultSec;
+                btnEl.classList.remove('warning');
+            }
+            btnEl.classList.add('running');
+            timerInterval = setInterval(() => {
+                if (remainingSec > 0) {
+                    remainingSec--;
+                    render();
+                    if (remainingSec <= warnSec) {
+                        btnEl.classList.remove('running');
+                        btnEl.classList.add('warning');
+                    }
+                } else {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    displayEl.textContent = 'Hết giờ!';
+                }
+            }, 1000);
+        });
+    }
+
+    const draftSaver = (() => {
+        const pending = new Map();
+        let timerId = null;
+
+        const flush = () => {
+            if (timerId) {
+                clearTimeout(timerId);
+                timerId = null;
+            }
+            if (pending.size === 0) return;
+            pending.forEach((val, key) => {
+                try {
+                    localStorage.setItem(key, val);
+                } catch (e) {}
+            });
+            pending.clear();
+        };
+
+        const schedule = (key, value) => {
+            pending.set(key, value);
+            if (!timerId) {
+                timerId = setTimeout(flush, 250);
+            }
+        };
+
+        const cancel = (key) => {
+            pending.delete(key);
+        };
+
+        window.addEventListener('pagehide', flush);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') flush();
+        });
+
+        return { schedule, flush, cancel };
+    })();
+
+    // --- 1. Interactive Phrases Translation Logic (Lazy Event Delegation) ---
+    const activeInteractivePhrases = new Set();
+
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.fill-blank') || e.target.closest('.signoff-btn')) {
+            return;
         }
 
-        // Add click event to toggle visibility
-        phrase.addEventListener('click', function(e) {
-            // If the user clicked a blank inside the phrase, do not toggle the translation box
-            if (e.target.closest('.fill-blank') || e.target.closest('.identity-inline-btn') || e.target.closest('.thanks-inline-btn') || e.target.closest('.signoff-btn')) {
-                return;
+        const phrase = e.target.closest('.interactive-phrase');
+        if (!phrase) {
+            if (activeInteractivePhrases.size > 0) {
+                activeInteractivePhrases.forEach(p => p.classList.remove('active'));
+                activeInteractivePhrases.clear();
             }
-            
-            // If highlight mode is active and they clicked on a highlight, do not toggle translation
-            if (isHighlightModeActive && e.target.closest('.custom-highlight')) {
-                return;
-            }
-            
-            // Prevent event bubbling in case phrases are nested
-            e.stopPropagation();
-            
-            this.classList.toggle('active');
-        });
-    });
+            return;
+        }
 
-    // Close open translations if clicking outside
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.interactive-phrase')) {
-            phrases.forEach(p => p.classList.remove('active'));
+        if (isHighlightModeActive && e.target.closest('.custom-highlight')) {
+            return;
+        }
+
+        const translationText = phrase.getAttribute('data-vi');
+        if (translationText && !phrase.querySelector('.translation-box')) {
+            const transBox = document.createElement('div');
+            transBox.className = 'translation-box';
+            transBox.textContent = translationText;
+            phrase.appendChild(transBox);
+        }
+
+        const isNowActive = phrase.classList.toggle('active');
+        if (isNowActive) {
+            activeInteractivePhrases.add(phrase);
+        } else {
+            activeInteractivePhrases.delete(phrase);
         }
     });
 
@@ -472,17 +586,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Toggle split-pane full-height layout for split workspaces
         if (appLayout) {
-            appLayout.classList.remove('sidebar-open');
-            if (targetView === 'khuyen-nghi' || targetView === 'hoi-thong-tin' || targetView === 'viet-luan') {
-                appLayout.classList.add('split-tab-active');
-            } else {
-                appLayout.classList.remove('split-tab-active');
-            }
-        }
-
-        const adviceMenuBtn = document.getElementById('advice-toggle-sidebar-btn');
-        if (adviceMenuBtn) {
-            adviceMenuBtn.classList.remove('active');
+            const isSplitView = targetView === 'khuyen-nghi' || targetView === 'hoi-thong-tin' || targetView === 'viet-luan';
+            appLayout.classList.toggle('split-tab-active', isSplitView);
         }
 
         if (targetView === 'my-submissions' && typeof renderMySubmissionsView === 'function') {
@@ -680,165 +785,71 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- 4. Interactive Mock Exam Word Count & Independent Timers ---
-    const mockExamWindows = document.querySelectorAll('.mock-exam-window');
-    
-    mockExamWindows.forEach(windowEl => {
-        const textarea = windowEl.querySelector('.mock-textarea');
-        const wordCountElement = windowEl.querySelector('.word-count strong');
-        const timerElement = windowEl.querySelector('.mock-timer');
+    // --- 4. Independent Timers for Legacy Mock Exam Windows (Tabs 4–8) ---
+    document.querySelectorAll('.mock-exam-window .mock-timer').forEach(timerElement => {
+        let time = 20 * 60;
+        let timerId = null;
 
-        // Dynamic Word Counter
-        if (textarea && wordCountElement) {
-            textarea.addEventListener('input', () => {
-                const text = textarea.value.trim();
-                // Split by whitespace and filter empty strings
-                const words = text.length > 0 ? text.split(/\s+/).length : 0;
-                wordCountElement.textContent = words;
-            });
-        }
+        const updateTimerDisplay = () => {
+            const minutes = Math.floor(time / 60).toString().padStart(2, '0');
+            const seconds = (time % 60).toString().padStart(2, '0');
+            timerElement.textContent = `${minutes}:${seconds}`;
+        };
 
-        // Independent Countdown Timer (triggers once on click of the timer element)
-        if (timerElement) {
-            let time = 20 * 60; // 20 minutes default
-            let timerId = null;
+        const startTimer = () => {
+            if (timerId) return;
+            timerElement.style.background = '#10b981';
 
-            const updateTimerDisplay = () => {
-                const minutes = Math.floor(time / 60).toString().padStart(2, '0');
-                const seconds = (time % 60).toString().padStart(2, '0');
-                timerElement.textContent = `${minutes}:${seconds}`;
-            };
-
-            const startTimer = () => {
-                if (timerId) return;
-                
-                // Visual change to indicate timer is active
-                timerElement.style.background = '#10b981'; // Active Green
-                
-                timerId = setInterval(() => {
-                    if (time > 0) {
-                        time--;
-                        updateTimerDisplay();
-                        
-                        // Alert when 2 minutes left
-                        if (time === 120) {
-                            timerElement.style.background = '#f59e0b'; // Warn Orange
-                        }
-                    } else {
-                        clearInterval(timerId);
-                        timerElement.textContent = "Hết giờ!";
-                        timerElement.style.background = '#ef4444'; // Red
+            timerId = setInterval(() => {
+                if (time > 0) {
+                    time--;
+                    updateTimerDisplay();
+                    if (time === 120) {
+                        timerElement.style.background = '#f59e0b';
                     }
-                }, 1000);
-            };
+                } else {
+                    clearInterval(timerId);
+                    timerElement.textContent = 'Hết giờ!';
+                    timerElement.style.background = '#ef4444';
+                }
+            }, 1000);
+        };
 
-            // Trigger when first clicked
-            timerElement.addEventListener('click', startTimer, { once: true });
-            timerElement.style.cursor = 'pointer';
-            
-            // Set initial state
-            updateTimerDisplay();
-        }
+        timerElement.addEventListener('click', startTimer, { once: true });
+        timerElement.style.cursor = 'pointer';
+        updateTimerDisplay();
     });
 
     // --- 5. Interactive fill-in-the-blanks logic ---
     document.addEventListener('click', (e) => {
         if (e.target.matches('.fill-blank')) {
-            e.stopPropagation(); // prevent triggering the parent interactive-phrase translation
+            e.stopPropagation();
             const blank = e.target;
             blank.classList.toggle('revealed');
-            if (blank.classList.contains('revealed')) {
-                blank.textContent = blank.getAttribute('data-text') || '____';
-            } else {
-                blank.textContent = '____';
-            }
+            blank.textContent = blank.classList.contains('revealed')
+                ? (blank.getAttribute('data-text') || '____')
+                : '____';
         }
     });
 
-    // --- 6. Purpose buttons selection logic ---
-    const purposeButtons = document.querySelectorAll('.purpose-btn');
-    purposeButtons.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const templatePart = btn.closest('.template-part');
-            const inlineResult = templatePart ? templatePart.querySelector('.purpose-inline-result') : null;
-            const selectorContainer = btn.closest('.purpose-selector');
-            
-            if (!inlineResult || !selectorContainer) return;
-            
-            const isAlreadyActive = btn.classList.contains('active');
-            
-            // Remove active from all buttons in this group
-            selectorContainer.querySelectorAll('.purpose-btn').forEach(b => b.classList.remove('active'));
-            
-            if (isAlreadyActive) {
-                // Toggle off
-                inlineResult.innerHTML = '____';
-                inlineResult.classList.remove('revealed-purpose');
-            } else {
-                // Activate
-                btn.classList.add('active');
-                inlineResult.innerHTML = btn.getAttribute('data-html') || '____';
-                inlineResult.classList.add('revealed-purpose');
-            }
-        });
-    });
-
-    // --- 7. Identity inline buttons logic ---
-    const identityInlineButtons = document.querySelectorAll('.identity-inline-btn');
-    identityInlineButtons.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent toggling the parent translation box
-            const parent = btn.parentElement;
-            const isAlreadyActive = btn.classList.contains('active');
-            
-            // Deactivate all buttons in this group
-            parent.querySelectorAll('.identity-inline-btn').forEach(b => b.classList.remove('active'));
-            
-            if (!isAlreadyActive) {
-                btn.classList.add('active');
-            }
-        });
-    });
-
     window.changePromptFontSize = function(change) {
-        const promptContainers = document.querySelectorAll('.mock-content');
-        promptContainers.forEach(container => {
-            let currentSize = parseFloat(window.getComputedStyle(container).fontSize);
-            let newSize = currentSize + change;
+        document.querySelectorAll('.mock-content').forEach(container => {
+            const currentSize = parseFloat(window.getComputedStyle(container).fontSize);
+            const newSize = currentSize + change;
             if (newSize >= 12 && newSize <= 24) {
-                container.style.fontSize = newSize + 'px';
+                container.style.fontSize = `${newSize}px`;
             }
-        });
-    };
-    window.resetPromptFontSize = function() {
-        const promptContainers = document.querySelectorAll('.mock-content');
-        promptContainers.forEach(container => {
-            container.style.fontSize = ''; // Revert to CSS default
         });
     };
 
-    // --- 10. Thanks Inline Buttons Choice Logic ---
-    const thanksButtons = document.querySelectorAll('.thanks-inline-btn');
-    thanksButtons.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const parent = btn.closest('.thanks-btn-group');
-            if (!parent) return;
-            const isAlreadyActive = btn.classList.contains('active');
-            
-            // Remove active state from all buttons in this group
-            parent.querySelectorAll('.thanks-inline-btn').forEach(b => b.classList.remove('active'));
-            
-            if (!isAlreadyActive) {
-                btn.classList.add('active');
-            }
+    window.resetPromptFontSize = function() {
+        document.querySelectorAll('.mock-content').forEach(container => {
+            container.style.fontSize = '';
         });
-    });
+    };
 
     // --- 11. Sign-off Buttons Toggle Logic ---
-    const signoffButtons = document.querySelectorAll('.signoff-btn');
-    signoffButtons.forEach(btn => {
+    document.querySelectorAll('.signoff-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             btn.classList.toggle('active');
@@ -1756,34 +1767,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 16.2 Draggable Split-Screen Resizer
-    if (adviceResizer && adviceWorkspace) {
-        let isDraggingSplit = false;
-
-        adviceResizer.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            isDraggingSplit = true;
-            adviceResizer.classList.add('dragging');
-            document.body.style.cursor = 'col-resize';
-            document.body.style.userSelect = 'none';
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (!isDraggingSplit) return;
-            const rect = adviceWorkspace.getBoundingClientRect();
-            if (rect.width <= 0) return;
-            let pct = ((e.clientX - rect.left) / rect.width) * 100;
-            pct = Math.max(30, Math.min(70, pct));
-            adviceWorkspace.style.setProperty('--left-pane-width', `${pct.toFixed(1)}%`);
-        });
-
-        window.addEventListener('mouseup', () => {
-            if (!isDraggingSplit) return;
-            isDraggingSplit = false;
-            adviceResizer.classList.remove('dragging');
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-        });
-    }
+    attachSplitResizer(adviceResizer, adviceWorkspace, 30, 70);
 
     // 16.3 Toggle Prompt Translation
     const togglePromptTransBtn = document.getElementById('advice-toggle-prompt-trans-btn');
@@ -1799,65 +1783,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 16.4 Sidebar Drawer Toggle (Hidden by default in split-screen writing mode)
-    const toggleSidebarBtn = document.getElementById('advice-toggle-sidebar-btn');
-    if (toggleSidebarBtn && appLayout) {
-        toggleSidebarBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isOpen = appLayout.classList.toggle('sidebar-open');
-            toggleSidebarBtn.classList.toggle('active', isOpen);
-        });
-
-        // Close sidebar overlay when clicking outside of it
-        document.addEventListener('click', (e) => {
-            if (!appLayout.classList.contains('sidebar-open')) return;
-            if (!e.target.closest('.sidebar') && !e.target.closest('#advice-toggle-sidebar-btn')) {
-                appLayout.classList.remove('sidebar-open');
-                toggleSidebarBtn.classList.remove('active');
-            }
-        });
-    }
-
     // 16.5 Countdown Timer (20:00)
     const adviceTimerBtn = document.getElementById('advice-timer-btn');
     const adviceTimerDisplay = document.getElementById('advice-timer-display');
-    if (adviceTimerBtn && adviceTimerDisplay) {
-        let remainingSec = 20 * 60;
-        let timerInterval = null;
-
-        const renderTimer = () => {
-            const m = Math.floor(remainingSec / 60).toString().padStart(2, '0');
-            const s = (remainingSec % 60).toString().padStart(2, '0');
-            adviceTimerDisplay.textContent = `${m}:${s}`;
-        };
-
-        adviceTimerBtn.addEventListener('click', () => {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-                adviceTimerBtn.classList.remove('running');
-                return;
-            }
-            if (remainingSec <= 0) {
-                remainingSec = 20 * 60;
-            }
-            adviceTimerBtn.classList.add('running');
-            timerInterval = setInterval(() => {
-                if (remainingSec > 0) {
-                    remainingSec--;
-                    renderTimer();
-                    if (remainingSec <= 120) {
-                        adviceTimerBtn.classList.remove('running');
-                        adviceTimerBtn.classList.add('warning');
-                    }
-                } else {
-                    clearInterval(timerInterval);
-                    timerInterval = null;
-                    adviceTimerDisplay.textContent = 'Hết giờ!';
-                }
-            }, 1000);
-        });
-    }
+    bindCountdownTimer(adviceTimerBtn, adviceTimerDisplay, 20 * 60, 120);
 
     // 16.6 Live Word Counter, Prompt Switcher (5 Đề), LocalStorage Draft & Submit / Sample Comparison
     const adviceTextarea = document.getElementById('advice-writing-textarea');
@@ -2061,35 +1990,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (advicePromptSelect) {
         advicePromptSelect.addEventListener('change', (e) => {
+            draftSaver.flush();
             selectAdvicePrompt(e.target.value);
         });
     }
 
     advicePromptNumBtns.forEach(btn => {
         btn.addEventListener('click', () => {
+            draftSaver.flush();
             selectAdvicePrompt(btn.getAttribute('data-advice-prompt'));
         });
     });
 
     if (adviceTextarea) {
-        let initialDraft = '';
-        try {
-            initialDraft = localStorage.getItem(getAdviceStorageKey(currentAdvicePromptId)) || '';
-            if (initialDraft) {
-                adviceTextarea.value = initialDraft;
-            }
-        } catch (e) {}
-
-        isCurrentAdviceSubmitted = checkStoredAdviceSubmitted(currentAdvicePromptId, initialDraft);
-        syncAdviceSampleUI(isCurrentAdviceSubmitted);
-        updateAdviceWordState();
-
         adviceTextarea.addEventListener('input', () => {
             updateAdviceWordState();
-            try {
-                localStorage.setItem(getAdviceStorageKey(currentAdvicePromptId), adviceTextarea.value);
-            } catch (e) {}
+            draftSaver.schedule(getAdviceStorageKey(currentAdvicePromptId), adviceTextarea.value);
         });
+        adviceTextarea.addEventListener('blur', () => draftSaver.flush());
     }
 
     if (adviceSubmitBtn && adviceFeedbackBox) {
@@ -2171,8 +2089,10 @@ document.addEventListener('DOMContentLoaded', () => {
             adviceTextarea.value = '';
             const cloudSub = getCloudSubmission(getAdviceLessonId(currentAdvicePromptId));
             isCurrentAdviceSubmitted = Boolean(cloudSub && cloudSub.is_submitted);
+            const adviceKey = getAdviceStorageKey(currentAdvicePromptId);
+            draftSaver.cancel(adviceKey);
             try {
-                localStorage.removeItem(getAdviceStorageKey(currentAdvicePromptId));
+                localStorage.removeItem(adviceKey);
                 localStorage.removeItem(getAdviceSubmittedKey(currentAdvicePromptId));
             } catch (e) {}
             syncAdviceSampleUI(false);
@@ -2195,6 +2115,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Populate initial Advice Prompt 1 (Jay) from single source of truth
+    selectAdvicePrompt('1', { skipScroll: true });
 
     // --- 16b. Thư Hỏi Thông Tin (#hoi-thong-tin) — Split-Screen Workspace (4 Đề) ---
     const inquiryWorkspace = document.getElementById('inquiry-split-workspace');
@@ -2759,34 +2682,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 16b.2 Draggable Split-Screen Resizer
-    if (inquiryResizer && inquiryWorkspace) {
-        let isDraggingInquirySplit = false;
-
-        inquiryResizer.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            isDraggingInquirySplit = true;
-            inquiryResizer.classList.add('dragging');
-            document.body.style.cursor = 'col-resize';
-            document.body.style.userSelect = 'none';
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (!isDraggingInquirySplit) return;
-            const rect = inquiryWorkspace.getBoundingClientRect();
-            if (rect.width <= 0) return;
-            let pct = ((e.clientX - rect.left) / rect.width) * 100;
-            pct = Math.max(30, Math.min(70, pct));
-            inquiryWorkspace.style.setProperty('--left-pane-width', `${pct.toFixed(1)}%`);
-        });
-
-        window.addEventListener('mouseup', () => {
-            if (!isDraggingInquirySplit) return;
-            isDraggingInquirySplit = false;
-            inquiryResizer.classList.remove('dragging');
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-        });
-    }
+    attachSplitResizer(inquiryResizer, inquiryWorkspace, 30, 70);
 
     // 16b.3 Toggle Prompt Translation
     if (inquiryTogglePromptTransBtn && inquiryPromptCard) {
@@ -2801,43 +2697,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 16b.4 Countdown Timer (20:00)
-    if (inquiryTimerBtn && inquiryTimerDisplay) {
-        let inquiryRemainingSec = 20 * 60;
-        let inquiryTimerInterval = null;
-
-        const renderInquiryTimer = () => {
-            const m = Math.floor(inquiryRemainingSec / 60).toString().padStart(2, '0');
-            const s = (inquiryRemainingSec % 60).toString().padStart(2, '0');
-            inquiryTimerDisplay.textContent = `${m}:${s}`;
-        };
-
-        inquiryTimerBtn.addEventListener('click', () => {
-            if (inquiryTimerInterval) {
-                clearInterval(inquiryTimerInterval);
-                inquiryTimerInterval = null;
-                inquiryTimerBtn.classList.remove('running');
-                return;
-            }
-            if (inquiryRemainingSec <= 0) {
-                inquiryRemainingSec = 20 * 60;
-            }
-            inquiryTimerBtn.classList.add('running');
-            inquiryTimerInterval = setInterval(() => {
-                if (inquiryRemainingSec > 0) {
-                    inquiryRemainingSec--;
-                    renderInquiryTimer();
-                    if (inquiryRemainingSec <= 120) {
-                        inquiryTimerBtn.classList.remove('running');
-                        inquiryTimerBtn.classList.add('warning');
-                    }
-                } else {
-                    clearInterval(inquiryTimerInterval);
-                    inquiryTimerInterval = null;
-                    inquiryTimerDisplay.textContent = 'Hết giờ!';
-                }
-            }, 1000);
-        });
-    }
+    bindCountdownTimer(inquiryTimerBtn, inquiryTimerDisplay, 20 * 60, 120);
 
     // 16b.5 Word Counter, Prompt Switcher (4 Đề), LocalStorage Draft, Cloud Submit & Sample Comparison
     function getInquiryMinWords() {
@@ -3016,12 +2876,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (inquiryPromptSelect) {
         inquiryPromptSelect.addEventListener('change', (e) => {
+            draftSaver.flush();
             selectInquiryPrompt(e.target.value);
         });
     }
 
     inquiryPromptNumBtns.forEach(btn => {
         btn.addEventListener('click', () => {
+            draftSaver.flush();
             selectInquiryPrompt(btn.getAttribute('data-inquiry-prompt'));
         });
     });
@@ -3029,10 +2891,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (inquiryTextarea) {
         inquiryTextarea.addEventListener('input', () => {
             updateInquiryWordState();
-            try {
-                localStorage.setItem(getInquiryStorageKey(currentInquiryPromptId), inquiryTextarea.value);
-            } catch (e) {}
+            draftSaver.schedule(getInquiryStorageKey(currentInquiryPromptId), inquiryTextarea.value);
         });
+        inquiryTextarea.addEventListener('blur', () => draftSaver.flush());
     }
 
     if (inquirySubmitBtn && inquiryFeedbackBox) {
@@ -3114,8 +2975,10 @@ document.addEventListener('DOMContentLoaded', () => {
             inquiryTextarea.value = '';
             const cloudSub = getCloudSubmission(getInquiryLessonId(currentInquiryPromptId));
             isCurrentInquirySubmitted = Boolean(cloudSub && cloudSub.is_submitted);
+            const inquiryKey = getInquiryStorageKey(currentInquiryPromptId);
+            draftSaver.cancel(inquiryKey);
             try {
-                localStorage.removeItem(getInquiryStorageKey(currentInquiryPromptId));
+                localStorage.removeItem(inquiryKey);
                 localStorage.removeItem(getInquirySubmittedKey(currentInquiryPromptId));
             } catch (e) {}
             syncInquirySampleUI(false);
@@ -3253,13 +3116,19 @@ document.addEventListener('DOMContentLoaded', () => {
         renderEssayTimer();
     }
 
+    const essayTopicMap = new Map();
+    essayTopicContainers.forEach(container => {
+        const key = container.getAttribute('data-essay-topic');
+        if (key) essayTopicMap.set(key, container);
+    });
+
     function applyEssayLevel(lv) {
         currentEssayLevel = lv === 'B2' ? 'B2' : 'B1';
         essayLevelBtns.forEach(b => {
             b.classList.toggle('active', b.getAttribute('data-essay-level') === currentEssayLevel);
         });
 
-        const activeContainer = document.querySelector(`.essay-topic-guides[data-essay-topic="${currentEssayTopic}"]`);
+        const activeContainer = essayTopicMap.get(currentEssayTopic);
         if (activeContainer) {
             const b1Sec = activeContainer.querySelector('[data-topic-level="B1"]');
             const b2Sec = activeContainer.querySelector('[data-topic-level="B2"]');
@@ -3358,6 +3227,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Bind topic opener cards/buttons
     document.querySelectorAll('[data-open-essay]').forEach(btn => {
         btn.addEventListener('click', () => {
+            draftSaver.flush();
             const topicId = btn.getAttribute('data-open-essay');
             selectEssayTopic(topicId);
             navigateToView('viet-luan');
@@ -3375,39 +3245,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 17.2 Draggable Split-Screen Resizer for Essay Tab
-    if (essayResizer && essayWorkspace) {
-        let isDraggingEssaySplit = false;
+    attachSplitResizer(essayResizer, essayWorkspace, 32, 72);
 
-        essayResizer.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            isDraggingEssaySplit = true;
-            essayResizer.classList.add('dragging');
-            document.body.style.cursor = 'col-resize';
-            document.body.style.userSelect = 'none';
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (!isDraggingEssaySplit) return;
-            const rect = essayWorkspace.getBoundingClientRect();
-            if (rect.width <= 0) return;
-            let pct = ((e.clientX - rect.left) / rect.width) * 100;
-            pct = Math.max(32, Math.min(72, pct));
-            essayWorkspace.style.setProperty('--left-pane-width', `${pct.toFixed(1)}%`);
-        });
-
-        window.addEventListener('mouseup', () => {
-            if (!isDraggingEssaySplit) return;
-            isDraggingEssaySplit = false;
-            essayResizer.classList.remove('dragging');
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-        });
-    }
-
-    // 17.3 Toggle Sample Essay (Show / Hide) for B1 & B2
-    const essaySampleToggleBtns = document.querySelectorAll('[data-essay-sample-toggle]');
-    essaySampleToggleBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
+    // 17.3 Toggle Sample Essay (Show / Hide) for B1 & B2 (Delegated)
+    if (essayTheoryScrollPane) {
+        essayTheoryScrollPane.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-essay-sample-toggle]');
+            if (!btn) return;
             const targetId = btn.getAttribute('data-essay-sample-toggle');
             const body = targetId ? document.getElementById(targetId) : null;
             if (!body) return;
@@ -3423,7 +3267,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 label.textContent = isHidden ? 'Ẩn bài mẫu' : 'Hiện bài mẫu';
             }
         });
-    });
+    }
 
     // 17.5 Countdown Timer (40:00 for VSTEP Essay Task 2)
     if (essayTimerBtn && essayTimerDisplay) {
@@ -3467,10 +3311,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         essayTextarea.addEventListener('input', () => {
             updateEssayWordState();
-            try {
-                localStorage.setItem(getCurrentEssayStorageKey(), essayTextarea.value);
-            } catch (e) {}
+            draftSaver.schedule(getCurrentEssayStorageKey(), essayTextarea.value);
         });
+        essayTextarea.addEventListener('blur', () => draftSaver.flush());
     }
 
     if (essaySubmitBtn) {
@@ -3525,8 +3368,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             essayTextarea.value = '';
+            const essayKey = getCurrentEssayStorageKey();
+            draftSaver.cancel(essayKey);
             try {
-                localStorage.removeItem(getCurrentEssayStorageKey());
+                localStorage.removeItem(essayKey);
             } catch (e) {}
             updateEssayWordState();
             essayTextarea.focus();
@@ -3660,14 +3505,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function refreshStudentReviews() {
+    let lastReviewsRefreshMs = 0;
+    let reviewsRefreshInFlight = false;
+
+    async function refreshStudentReviews(force = false) {
         const client = CLOUD ? CLOUD.getClient() : null;
-        if (!client || !currentAccount) return;
+        if (!client || !currentAccount || reviewsRefreshInFlight) return;
+        const now = Date.now();
+        if (!force && now - lastReviewsRefreshMs < 10000) return;
+
+        reviewsRefreshInFlight = true;
         try {
             const { data } = await client
                 .from('writing_ai_reviews')
                 .select('*')
                 .eq('user_id', currentAccount.id);
+            lastReviewsRefreshMs = Date.now();
             if (Array.isArray(data)) {
                 const map = {};
                 data.forEach(row => {
@@ -3680,7 +3533,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, getCloudSubmission(getInquiryLessonId(currentInquiryPromptId)));
                 renderTeacherFeedbackBox(essayTeacherFeedbackBox, getCloudSubmission(currentEssayTopic));
             }
-        } catch (e) {}
+        } catch (e) {} finally {
+            reviewsRefreshInFlight = false;
+        }
     }
 
     function startNotificationPolling() {
@@ -3690,7 +3545,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         authState.notifPollTimer = setInterval(() => {
             if (currentAccount && document.visibilityState === 'visible') {
-                refreshStudentReviews();
+                refreshStudentReviews(false);
             }
         }, 60000);
     }
@@ -3702,7 +3557,7 @@ document.addEventListener('DOMContentLoaded', () => {
             topbarNotifDropdown.style.display = authState.notifOpen ? 'block' : 'none';
             topbarNotifBtn.setAttribute('aria-expanded', authState.notifOpen ? 'true' : 'false');
             if (authState.notifOpen) {
-                refreshStudentReviews();
+                refreshStudentReviews(true);
             }
         });
 
@@ -3717,7 +3572,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.addEventListener('focus', () => {
         if (currentAccount) {
-            refreshStudentReviews();
+            refreshStudentReviews(false);
         }
     });
 
@@ -3857,12 +3712,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const client = CLOUD ? CLOUD.getClient() : null;
+        draftSaver.flush();
         if (client) {
             try {
                 await client.auth.signOut();
             } catch (e) {}
         }
         currentAccount = null;
+        lastReviewsRefreshMs = 0;
         authState.isTeacher = false;
         authState.needsProfileSetup = false;
         authState.submissionsByLessonId = {};
@@ -4411,11 +4268,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     })();
 });
-
-// --- 9. Collapsible Prompt List ---
-window.togglePromptList = function(element) {
-    element.classList.toggle('collapsed');
-};
 
 // --- 14. Sample Essay Toggle and Font Size Adjustment ---
 window.toggleSampleEssay = function(button) {
