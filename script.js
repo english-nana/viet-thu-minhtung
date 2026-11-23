@@ -47,54 +47,257 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- 2. Sidebar Tab Navigation Logic ---
-    const tabs = document.querySelectorAll('.nav-tab');
+    // --- 2. Clean Minimal Topbar & History-Aware Multi-Level Navigation ---
     const tabContents = document.querySelectorAll('.tab-content');
     const appLayout = document.querySelector('.app-layout');
+    const brandTagEl = document.getElementById('topbar-brand-tag');
+    const brandTitleEl = document.getElementById('topbar-brand-title');
+    const contextDividerEl = document.getElementById('topbar-context-divider');
+    const contextLabelEl = document.getElementById('topbar-context-label');
+    const topbarBackBtn = document.getElementById('topbar-back-btn');
+    const topbarBackText = document.getElementById('topbar-back-text');
 
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const targetTab = tab.getAttribute('data-tab');
+    // --- 2b. Supabase Cloud Auth & Writing Submissions Shared State ---
+    const CLOUD = window.WritingCloud || null;
+    let currentAccount = null;
+    const authState = {
+        authMode: 'login', // 'login' | 'register'
+        authError: '',
+        authInfo: '',
+        authLoading: false,
+        isTeacher: false,
+        needsProfileSetup: false,
+        profileFormName: '',
+        profileFormClass: CLOUD && CLOUD.CLASS_LIST ? CLOUD.CLASS_LIST[0] : 'ONB204',
+        profileFormError: '',
+        profileSaving: false,
+        regSelectedClass: CLOUD && CLOUD.CLASS_LIST ? CLOUD.CLASS_LIST[0] : 'ONB204',
+        submissionsByLessonId: {},
+        isSubmittingAdvice: false,
+        isSubmittingEssay: false
+    };
 
-            // Set active class on buttons
-            tabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
+    function getUserScopedKey(baseKey) {
+        return currentAccount && currentAccount.id ? `${baseKey}__${currentAccount.id}` : baseKey;
+    }
 
-            // Set active class on content sections
-            tabContents.forEach(tc => tc.classList.remove('active'));
-            const activeContent = document.getElementById(targetTab);
-            if (activeContent) {
-                activeContent.classList.add('active');
+    function getCloudSubmission(lessonId) {
+        return (authState.submissionsByLessonId && authState.submissionsByLessonId[lessonId]) || null;
+    }
+
+    function getCatalogLessonTitle(lessonId, fallbackTitle) {
+        if (CLOUD && Array.isArray(CLOUD.LESSONS_CATALOG)) {
+            const found = CLOUD.LESSONS_CATALOG.find(item => item.id === lessonId);
+            if (found && found.title) return found.title;
+        }
+        return fallbackTitle || lessonId;
+    }
+
+    function renderTeacherFeedbackBox(boxEl, sub) {
+        if (!boxEl) return;
+        if (!sub || !sub.is_submitted) {
+            boxEl.style.display = 'none';
+            boxEl.innerHTML = '';
+            return;
+        }
+        const esc = CLOUD ? CLOUD.escapeHtml : (s => String(s || ''));
+        const fmtTime = CLOUD ? CLOUD.formatDateTime : (s => String(s || ''));
+        const submittedTime = fmtTime(sub.submitted_at || sub.updated_at || sub.created_at);
+        const hasGrade = Boolean((sub.teacher_score && sub.teacher_score.trim()) || (sub.teacher_feedback && sub.teacher_feedback.trim()));
+
+        if (hasGrade) {
+            boxEl.innerHTML = `
+                <div class="writing-tf-head">
+                    <span class="writing-tf-title">👨‍🏫 Nhận xét từ Giáo viên${submittedTime ? ` · Đã nộp ${esc(submittedTime)}` : ''}</span>
+                    ${sub.teacher_score ? `<span class="writing-tf-score">Điểm: ${esc(sub.teacher_score)}</span>` : ''}
+                </div>
+                ${sub.teacher_feedback ? `<p class="writing-tf-comment">${esc(sub.teacher_feedback)}</p>` : ''}
+            `;
+        } else {
+            boxEl.innerHTML = `
+                <div class="writing-tf-head">
+                    <span class="writing-tf-title">✓ Đã gửi bài viết cho Giáo viên${submittedTime ? ` lúc ${esc(submittedTime)}` : ''}</span>
+                    <span class="writing-tf-score">${esc(String(sub.word_count || 0))} từ · Level ${esc(sub.target_level || 'B1')}</span>
+                </div>
+                <p class="writing-tf-comment">Bài viết đã được lưu trên hệ thống. Điểm số và nhận xét của Giáo viên sẽ tự động hiển thị tại đây sau khi chấm bài.</p>
+            `;
+        }
+        boxEl.style.display = 'block';
+    }
+
+    async function submitWritingToCloud({ taskType, lessonId, lessonTitle, promptText, content, wordCount, targetLevel }) {
+        const client = CLOUD ? CLOUD.getClient() : null;
+        if (!client || !currentAccount) {
+            return { ok: false, error: 'Bạn cần đăng nhập tài khoản trước khi nộp bài cho Giáo viên.' };
+        }
+        const nowIso = new Date().toISOString();
+        const rowId = `${currentAccount.id}__${lessonId}`;
+        const existing = getCloudSubmission(lessonId);
+
+        const payload = {
+            id: rowId,
+            user_id: currentAccount.id,
+            task_type: taskType,
+            lesson_id: lessonId,
+            lesson_title: lessonTitle || lessonId,
+            prompt_text: promptText || '',
+            content: content || '',
+            word_count: wordCount || 0,
+            target_level: targetLevel || 'B1',
+            is_submitted: true,
+            submitted_at: nowIso,
+            updated_at: nowIso
+        };
+
+        const { data, error } = await client
+            .from('writing_submissions')
+            .upsert(payload, { onConflict: 'id' })
+            .select('*')
+            .maybeSingle();
+
+        if (error) {
+            return { ok: false, error: error.message || 'Không thể lưu bài lên Supabase.' };
+        }
+
+        try {
+            await client
+                .from('profiles')
+                .update({ last_active_at: nowIso })
+                .eq('id', currentAccount.id);
+        } catch (e) {}
+
+        const savedRow = data || {
+            ...payload,
+            teacher_score: existing ? existing.teacher_score : '',
+            teacher_feedback: existing ? existing.teacher_feedback : ''
+        };
+        authState.submissionsByLessonId[lessonId] = savedRow;
+        return { ok: true, row: savedRow };
+    }
+
+    const VIEW_META = {
+        'home-dashboard': { mode: 'home', label: '', parent: null },
+        'task1-hub': { mode: 'task1', label: 'Danh sách bài học Task 01', parent: 'home-dashboard' },
+        'ly-thuyet': { mode: 'task1', label: 'Lý thuyết chung: Viết Thư & Email', parent: 'task1-hub' },
+        'khuyen-nghi': { mode: 'task1', label: 'Thư khuyên / đề xuất', parent: 'task1-hub' },
+        'hoi-thong-tin': { mode: 'task1', label: 'Thư hỏi thông tin', parent: 'task1-hub' },
+        'cung-cap-thong-tin': { mode: 'task1', label: 'Thư cung cấp thông tin', parent: 'task1-hub' },
+        'phan-nan': { mode: 'task1', label: 'Thư phàn nàn', parent: 'task1-hub' },
+        'danh-gia': { mode: 'task1', label: 'Thư cho đánh giá', parent: 'task1-hub' },
+        'xin-loi': { mode: 'task1', label: 'Thư xin lỗi', parent: 'task1-hub' },
+        'xin-viec': { mode: 'task1', label: 'Thư xin việc', parent: 'task1-hub' },
+        'task2-hub': { mode: 'task2', label: 'Danh sách bài học Task 02', parent: 'home-dashboard' },
+        'task2-ly-thuyet': { mode: 'task2', label: 'Lý thuyết chung: Viết Luận', parent: 'task2-hub' },
+        'viet-luan': { mode: 'task2', label: 'Chủ đề 1: Trẻ em & Thiết bị điện tử', parent: 'task2-hub' }
+    };
+
+    const viewHistory = ['home-dashboard'];
+
+    function updateTopbarForView(viewId) {
+        const meta = VIEW_META[viewId] || VIEW_META['home-dashboard'];
+        const isHome = viewId === 'home-dashboard';
+
+        if (brandTagEl && brandTitleEl) {
+            if (meta.mode === 'task1') {
+                brandTagEl.textContent = 'VSTEP WRITING · TASK 01';
+                brandTitleEl.textContent = 'Viết Thư & Email';
+            } else if (meta.mode === 'task2') {
+                brandTagEl.textContent = 'VSTEP WRITING · TASK 02';
+                brandTitleEl.textContent = 'Viết Luận (Essay)';
+            } else {
+                brandTagEl.textContent = 'VSTEP WRITING · B1 – B2';
+                brandTitleEl.textContent = 'Viết Thư & Viết Luận';
             }
+        }
 
-            if (appLayout) {
-                appLayout.classList.remove('sidebar-open');
-                if (targetTab === 'khuyen-nghi') {
-                    appLayout.classList.add('split-tab-active');
-                } else {
-                    appLayout.classList.remove('split-tab-active');
-                }
-            }
-            const adviceMenuBtn = document.getElementById('advice-toggle-sidebar-btn');
-            if (adviceMenuBtn) {
-                adviceMenuBtn.classList.remove('active');
-            }
+        if (contextDividerEl && contextLabelEl) {
+            const showContext = !isHome && viewId !== 'task1-hub' && viewId !== 'task2-hub';
+            contextDividerEl.style.display = showContext ? 'inline-block' : 'none';
+            contextLabelEl.style.display = showContext ? 'inline-block' : 'none';
+            contextLabelEl.textContent = showContext ? meta.label : '';
+        }
 
-            // Smooth scroll content area or window to top
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (topbarBackBtn) {
+            topbarBackBtn.style.display = isHome ? 'none' : 'inline-flex';
+            if (topbarBackText) {
+                topbarBackText.textContent = (viewId === 'task1-hub' || viewId === 'task2-hub')
+                    ? 'Quay lại 2 Task'
+                    : 'Quay lại';
+            }
+        }
+    }
+
+    function navigateToView(targetView, options = {}) {
+        if (!targetView) return;
+        const { fromBack = false } = options;
+
+        if (!fromBack) {
+            if (targetView === 'home-dashboard') {
+                viewHistory.length = 0;
+                viewHistory.push('home-dashboard');
+            } else if (viewHistory[viewHistory.length - 1] !== targetView) {
+                viewHistory.push(targetView);
+            }
+        }
+
+        updateTopbarForView(targetView);
+
+        // Switch visible content section
+        tabContents.forEach(tc => tc.classList.remove('active'));
+        const activeContent = document.getElementById(targetView);
+        if (activeContent) {
+            activeContent.classList.add('active');
+        }
+
+        // Toggle split-pane full-height layout for split workspaces
+        if (appLayout) {
+            appLayout.classList.remove('sidebar-open');
+            if (targetView === 'khuyen-nghi' || targetView === 'viet-luan') {
+                appLayout.classList.add('split-tab-active');
+            } else {
+                appLayout.classList.remove('split-tab-active');
+            }
+        }
+
+        const adviceMenuBtn = document.getElementById('advice-toggle-sidebar-btn');
+        if (adviceMenuBtn) {
+            adviceMenuBtn.classList.remove('active');
+        }
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function goBackView() {
+        const currentView = viewHistory[viewHistory.length - 1] || 'home-dashboard';
+        if (viewHistory.length > 1) {
+            viewHistory.pop();
+            const prevView = viewHistory[viewHistory.length - 1];
+            navigateToView(prevView, { fromBack: true });
+            return;
+        }
+        const fallbackParent = (VIEW_META[currentView] && VIEW_META[currentView].parent) || 'home-dashboard';
+        navigateToView(fallbackParent, { fromBack: true });
+    }
+
+    if (topbarBackBtn) {
+        topbarBackBtn.addEventListener('click', goBackView);
+    }
+
+    document.querySelectorAll('[data-open-view]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            navigateToView(btn.getAttribute('data-open-view'));
         });
     });
 
     // --- 2b. Jump-to-tab Cards & Level B1/B2 Switcher in Lý thuyết chung (#ly-thuyet) ---
     document.querySelectorAll('[data-jump-tab]').forEach(cardBtn => {
         cardBtn.addEventListener('click', () => {
-            const target = cardBtn.getAttribute('data-jump-tab');
-            const navBtn = document.querySelector(`.nav-tab[data-tab="${target}"]`);
-            if (navBtn) {
-                navBtn.click();
-            }
+            navigateToView(cardBtn.getAttribute('data-jump-tab'));
         });
     });
+
+    // Initialize clean topbar state on load
+    updateTopbarForView('home-dashboard');
 
     const theoryLevelBtns = document.querySelectorAll('[data-theory-level]');
     const theoryGridB1 = document.getElementById('theory-template-grid-B1');
@@ -1167,8 +1370,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getAdviceStorageKey(promptId) {
-        if (promptId === '1') return 'vstep_advice_jay_online_shopping_draft';
-        return `vstep_advice_draft_prompt_${promptId}`;
+        const base = promptId === '1'
+            ? 'vstep_advice_jay_online_shopping_draft'
+            : `vstep_advice_draft_prompt_${promptId}`;
+        return getUserScopedKey(base);
+    }
+
+    function getAdviceSubmittedKey(promptId) {
+        return getUserScopedKey(`vstep_advice_submitted_prompt_${promptId}`);
+    }
+
+    function getAdviceLessonId(promptId) {
+        return `advice-${String(promptId || currentAdvicePromptId)}`;
     }
 
     function updateAdviceHeaderTag() {
@@ -1314,10 +1527,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const adviceResetBtn = document.getElementById('advice-reset-btn');
     const advicePeekSampleBtn = document.getElementById('advice-peek-sample-btn');
     const adviceFeedbackBox = document.getElementById('advice-writing-feedback');
+    const adviceTeacherFeedbackBox = document.getElementById('advice-teacher-feedback-box');
     const adviceFeedbackTitle = document.getElementById('advice-feedback-title');
     const adviceFbTabs = document.querySelectorAll('[data-fb-level]');
     const adviceFbSampleB1 = document.getElementById('advice-fb-sample-B1');
     const adviceFbSampleB2 = document.getElementById('advice-fb-sample-B2');
+
+    let isCurrentAdviceSubmitted = false;
 
     function countWordsClean(text) {
         const cleaned = String(text || '').trim();
@@ -1325,29 +1541,109 @@ document.addEventListener('DOMContentLoaded', () => {
         return cleaned.split(/\s+/).filter(Boolean).length;
     }
 
+    function getAdviceMinWords() {
+        return parseInt((adviceTextarea && adviceTextarea.getAttribute('data-min-words')) || '120', 10);
+    }
+
+    function checkStoredAdviceSubmitted(promptId, draftText) {
+        const minW = getAdviceMinWords();
+        if (countWordsClean(draftText) < minW) return false;
+        try {
+            return localStorage.getItem(getAdviceSubmittedKey(promptId)) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function populateAdviceSamples(promptId, allowShow) {
+        const pData = ADVICE_PROMPTS_DATA[promptId];
+        if (!allowShow || !pData) {
+            if (adviceFbSampleB1) adviceFbSampleB1.innerHTML = '';
+            if (adviceFbSampleB2) adviceFbSampleB2.innerHTML = '';
+            return;
+        }
+        if (adviceFbSampleB1) {
+            adviceFbSampleB1.innerHTML = pData.sampleB1.map(p => `<p>${p}</p>`).join('');
+        }
+        if (adviceFbSampleB2) {
+            adviceFbSampleB2.innerHTML = pData.sampleB2.map(p => `<p>${p}</p>`).join('');
+        }
+    }
+
+    function syncAdviceSampleUI(revealSample = false) {
+        if (!isCurrentAdviceSubmitted) {
+            populateAdviceSamples(currentAdvicePromptId, false);
+            if (adviceFeedbackBox) {
+                adviceFeedbackBox.style.display = 'none';
+            }
+            if (advicePeekSampleBtn) {
+                advicePeekSampleBtn.disabled = true;
+                advicePeekSampleBtn.classList.add('locked');
+                advicePeekSampleBtn.innerHTML = '<i class="fas fa-lock"></i> Xem bài mẫu';
+                advicePeekSampleBtn.title = 'Hãy viết đủ 120 từ và bấm Nộp bài để mở khóa bài mẫu';
+            }
+            if (adviceSubmitBtn && !authState.isSubmittingAdvice) {
+                adviceSubmitBtn.textContent = 'Nộp bài';
+            }
+            return;
+        }
+
+        populateAdviceSamples(currentAdvicePromptId, true);
+        const wc = countWordsClean(adviceTextarea ? adviceTextarea.value : '');
+        if (adviceFeedbackTitle) {
+            adviceFeedbackTitle.textContent = `✓ Đã nộp bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`;
+        }
+        if (adviceFeedbackBox) {
+            adviceFeedbackBox.style.display = revealSample ? 'block' : 'none';
+        }
+        if (advicePeekSampleBtn) {
+            advicePeekSampleBtn.disabled = false;
+            advicePeekSampleBtn.classList.remove('locked');
+            advicePeekSampleBtn.innerHTML = revealSample
+                ? '<i class="fas fa-eye-slash"></i> Ẩn bài mẫu'
+                : '<i class="fas fa-eye"></i> Xem bài mẫu';
+            advicePeekSampleBtn.title = 'Ẩn / Hiện bài mẫu đối chiếu';
+        }
+        if (adviceSubmitBtn && !authState.isSubmittingAdvice) {
+            adviceSubmitBtn.textContent = 'Nộp lại';
+        }
+    }
+
     function updateAdviceWordState() {
         if (!adviceTextarea) return;
-        const minW = parseInt(adviceTextarea.getAttribute('data-min-words') || '120', 10);
+        const minW = getAdviceMinWords();
         const wc = countWordsClean(adviceTextarea.value);
         const needed = Math.max(0, minW - wc);
         const canSubmit = wc >= minW;
+        const cloudSub = getCloudSubmission(getAdviceLessonId(currentAdvicePromptId));
 
         if (adviceWcEl) {
             adviceWcEl.textContent = `${wc} từ`;
         }
         if (adviceStatusEl) {
-            adviceStatusEl.textContent = canSubmit
-                ? `${wc}/${minW} từ · Đủ điều kiện nộp bài`
-                : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp`;
-            adviceStatusEl.classList.toggle('ready', canSubmit);
+            if (cloudSub && cloudSub.is_submitted) {
+                adviceStatusEl.textContent = canSubmit
+                    ? `✓ Đã nộp cho Giáo viên (${wc} từ) · Đã mở khóa bài mẫu`
+                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp bản sửa mới`;
+            } else if (isCurrentAdviceSubmitted) {
+                adviceStatusEl.textContent = canSubmit
+                    ? `✓ Đã nộp (${wc} từ) · Đã mở khóa bài mẫu`
+                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp lại`;
+            } else {
+                adviceStatusEl.textContent = canSubmit
+                    ? `${wc}/${minW} từ · Đủ điều kiện — bấm Nộp bài để gửi Giáo viên & xem bài mẫu`
+                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp & xem bài mẫu`;
+            }
+            adviceStatusEl.classList.toggle('ready', canSubmit || isCurrentAdviceSubmitted || Boolean(cloudSub && cloudSub.is_submitted));
         }
         if (adviceSubmitBtn) {
-            adviceSubmitBtn.disabled = !canSubmit;
+            adviceSubmitBtn.disabled = !canSubmit || authState.isSubmittingAdvice;
             adviceSubmitBtn.classList.toggle('unanswered', !canSubmit);
         }
     }
 
-    function selectAdvicePrompt(promptId) {
+    function selectAdvicePrompt(promptId, options = {}) {
+        const { skipScroll = false } = options;
         const pData = ADVICE_PROMPTS_DATA[promptId];
         if (!pData) return;
         currentAdvicePromptId = String(promptId);
@@ -1368,7 +1664,7 @@ document.addEventListener('DOMContentLoaded', () => {
             adviceGuideB2.innerHTML = buildLevelGuideHtml('B2', pData.b2);
         }
 
-        // Update Right Pane Task Title, Prompt Card & Sample Answers
+        // Update Right Pane Task Title & Prompt Card
         if (adviceExNumPill) {
             adviceExNumPill.textContent = pData.numLabel;
         }
@@ -1392,35 +1688,34 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
 
-        if (adviceFbSampleB1) {
-            adviceFbSampleB1.innerHTML = pData.sampleB1.map(p => `<p>${p}</p>`).join('');
-        }
-        if (adviceFbSampleB2) {
-            adviceFbSampleB2.innerHTML = pData.sampleB2.map(p => `<p>${p}</p>`).join('');
-        }
-        if (adviceFeedbackBox) {
-            adviceFeedbackBox.style.display = 'none';
-        }
-
-        // Load saved draft for this prompt
+        // Load saved draft & cloud submission state for this prompt
+        const cloudSub = getCloudSubmission(getAdviceLessonId(currentAdvicePromptId));
+        let saved = '';
         if (adviceTextarea) {
             adviceTextarea.placeholder = pData.placeholder;
-            let saved = '';
             try {
                 saved = localStorage.getItem(getAdviceStorageKey(currentAdvicePromptId)) || '';
             } catch (e) {}
+            if (!saved && cloudSub && cloudSub.content) {
+                saved = cloudSub.content;
+            }
             adviceTextarea.value = saved;
-            updateAdviceWordState();
         }
 
+        isCurrentAdviceSubmitted = Boolean(cloudSub && cloudSub.is_submitted) || checkStoredAdviceSubmitted(currentAdvicePromptId, saved);
+        syncAdviceSampleUI(false);
+        renderTeacherFeedbackBox(adviceTeacherFeedbackBox, cloudSub);
+        updateAdviceWordState();
         updateAdviceHeaderTag();
 
-        if (adviceTheoryScrollPane) {
-            adviceTheoryScrollPane.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-        const exScrollPane = document.getElementById('advice-exercises-scroll-pane');
-        if (exScrollPane) {
-            exScrollPane.scrollTo({ top: 0, behavior: 'smooth' });
+        if (!skipScroll) {
+            if (adviceTheoryScrollPane) {
+                adviceTheoryScrollPane.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+            const exScrollPane = document.getElementById('advice-exercises-scroll-pane');
+            if (exScrollPane) {
+                exScrollPane.scrollTo({ top: 0, behavior: 'smooth' });
+            }
         }
     }
 
@@ -1437,13 +1732,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (adviceTextarea) {
+        let initialDraft = '';
         try {
-            const savedDraft = localStorage.getItem(getAdviceStorageKey(currentAdvicePromptId));
-            if (savedDraft) {
-                adviceTextarea.value = savedDraft;
+            initialDraft = localStorage.getItem(getAdviceStorageKey(currentAdvicePromptId)) || '';
+            if (initialDraft) {
+                adviceTextarea.value = initialDraft;
             }
         } catch (e) {}
 
+        isCurrentAdviceSubmitted = checkStoredAdviceSubmitted(currentAdvicePromptId, initialDraft);
+        syncAdviceSampleUI(isCurrentAdviceSubmitted);
         updateAdviceWordState();
 
         adviceTextarea.addEventListener('input', () => {
@@ -1455,28 +1753,69 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (adviceSubmitBtn && adviceFeedbackBox) {
-        adviceSubmitBtn.addEventListener('click', () => {
-            const wc = countWordsClean(adviceTextarea ? adviceTextarea.value : '');
-            if (wc < 120) return;
-            adviceFeedbackBox.style.display = 'block';
-            if (adviceFeedbackTitle) {
-                adviceFeedbackTitle.textContent = `✓ Đã nộp bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`;
+        adviceSubmitBtn.addEventListener('click', async () => {
+            const minW = getAdviceMinWords();
+            const content = adviceTextarea ? adviceTextarea.value.trim() : '';
+            const wc = countWordsClean(content);
+            if (wc < minW || authState.isSubmittingAdvice) return;
+
+            const pData = ADVICE_PROMPTS_DATA[currentAdvicePromptId];
+            const lessonId = getAdviceLessonId(currentAdvicePromptId);
+            const lessonTitle = getCatalogLessonTitle(
+                lessonId,
+                pData ? `Task 01 · ${pData.numLabel}: ${pData.taskTitle}` : lessonId
+            );
+            const promptText = pData
+                ? `${pData.promptEn}\n${(pData.bullets || []).map(b => `- ${b.en}`).join('\n')}`
+                : '';
+
+            authState.isSubmittingAdvice = true;
+            adviceSubmitBtn.disabled = true;
+            adviceSubmitBtn.textContent = 'Đang nộp...';
+
+            const res = await submitWritingToCloud({
+                taskType: 'task1',
+                lessonId,
+                lessonTitle,
+                promptText,
+                content,
+                wordCount: wc,
+                targetLevel: currentAdviceLevel
+            });
+
+            authState.isSubmittingAdvice = false;
+
+            if (!res.ok) {
+                adviceSubmitBtn.disabled = false;
+                adviceSubmitBtn.textContent = isCurrentAdviceSubmitted ? 'Nộp lại' : 'Nộp bài';
+                if (adviceStatusEl) {
+                    adviceStatusEl.textContent = `⚠️ Lỗi gửi bài lên Giáo viên: ${res.error}`;
+                    adviceStatusEl.classList.remove('ready');
+                }
+                return;
             }
-            adviceFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            isCurrentAdviceSubmitted = true;
+            try {
+                localStorage.setItem(getAdviceSubmittedKey(currentAdvicePromptId), '1');
+            } catch (e) {}
+            syncAdviceSampleUI(true);
+            renderTeacherFeedbackBox(adviceTeacherFeedbackBox, res.row);
+            updateAdviceWordState();
+            if (adviceTeacherFeedbackBox && adviceTeacherFeedbackBox.style.display !== 'none') {
+                adviceTeacherFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                adviceFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
         });
     }
 
     if (advicePeekSampleBtn && adviceFeedbackBox) {
         advicePeekSampleBtn.addEventListener('click', () => {
+            if (!isCurrentAdviceSubmitted) return;
             const isHidden = adviceFeedbackBox.style.display === 'none' || adviceFeedbackBox.style.display === '';
-            adviceFeedbackBox.style.display = isHidden ? 'block' : 'none';
+            syncAdviceSampleUI(isHidden);
             if (isHidden) {
-                const wc = countWordsClean(adviceTextarea ? adviceTextarea.value : '');
-                if (adviceFeedbackTitle) {
-                    adviceFeedbackTitle.textContent = wc >= 120
-                        ? `✓ Đã lưu bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`
-                        : `Đối chiếu với bài mẫu tham khảo (Level B1 & Level B2):`;
-                }
                 adviceFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         });
@@ -1490,12 +1829,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             adviceTextarea.value = '';
+            const cloudSub = getCloudSubmission(getAdviceLessonId(currentAdvicePromptId));
+            isCurrentAdviceSubmitted = Boolean(cloudSub && cloudSub.is_submitted);
             try {
                 localStorage.removeItem(getAdviceStorageKey(currentAdvicePromptId));
+                localStorage.removeItem(getAdviceSubmittedKey(currentAdvicePromptId));
             } catch (e) {}
-            if (adviceFeedbackBox) {
-                adviceFeedbackBox.style.display = 'none';
-            }
+            syncAdviceSampleUI(false);
             updateAdviceWordState();
             adviceTextarea.focus();
         });
@@ -1515,6 +1855,942 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // --- 17. Task 2 Essay Writing Workspace (#viet-luan) — Multi-Topic ---
+    const essayWorkspace = document.getElementById('essay-split-workspace');
+    const essayResizer = document.getElementById('essay-split-resizer');
+    const essayLevelBtns = document.querySelectorAll('[data-essay-level]');
+    const essayTopicContainers = document.querySelectorAll('.essay-topic-guides[data-essay-topic]');
+    const essayCurrentLevelTag = document.getElementById('essay-current-level-tag');
+    const essayTheoryScrollPane = document.getElementById('essay-theory-scroll-pane');
+    const essayExercisesScrollPane = document.getElementById('essay-exercises-scroll-pane');
+    const essayPromptTextEl = document.getElementById('essay-prompt-text');
+    const essayTimerBtn = document.getElementById('essay-timer-btn');
+    const essayTimerDisplay = document.getElementById('essay-timer-display');
+    const essayTextarea = document.getElementById('essay-writing-textarea');
+    const essayWcEl = document.getElementById('essay-writing-wc');
+    const essayStatusEl = document.getElementById('essay-writing-status');
+    const essaySubmitBtn = document.getElementById('essay-submit-btn');
+    const essayResetBtn = document.getElementById('essay-reset-btn');
+    const essayTeacherFeedbackBox = document.getElementById('essay-teacher-feedback-box');
+
+    const ESSAY_TOPICS = {
+        'children-devices': {
+            title: 'Chủ đề 1: Trẻ em & Thiết bị điện tử',
+            storageKey: 'vstep_essay_children_devices_draft',
+            prompt: "Nowadays, an increasing number of children spend a great deal of time using electronic devices such as smartphones, tablets, and video games instead of engaging in traditional activities like playing outdoors or reading books. This growing dependence on technology has raised concerns among parents and educators about its impact on children's physical health and social development. Discuss the causes of this problem and suggest possible solutions."
+        },
+        'fast-fashion': {
+            title: 'Chủ đề 2: Thời trang nhanh & Môi trường',
+            storageKey: 'vstep_essay_fast_fashion_draft',
+            prompt: "The rapid growth of the fast fashion industry has been identified as one of the major contributors to global carbon emissions, reportedly accounting for around 10% of the world's total emissions. This growing trend is causing serious damage to the environment through pollution, resource depletion and textile waste. Discuss the causes of this problem and suggest possible solutions to reduce it."
+        },
+        'choosing-job': {
+            title: 'Chủ đề 3: Lựa chọn công việc & Sự hài lòng',
+            storageKey: 'vstep_essay_choosing_job_draft',
+            prompt: "When choosing a job, people consider a wide range of factors, from salary and working environment to personal interests and career growth opportunities. While some believe that salary is the most important factor, others argue that job satisfaction and future prospects matter more. In your opinion, what is the most important factor when choosing a job? Give reasons and examples to support your answer."
+        },
+        'self-employment': {
+            title: 'Chủ đề 4: Tự kinh doanh / Tự làm chủ',
+            storageKey: 'vstep_essay_self_employment_draft',
+            prompt: "In recent years, an increasing number of people have chosen to become self-employed rather than work for a company. While self-employment offers greater flexibility and independence, it also comes with certain risks and challenges that traditional employees do not usually face. Discuss the advantages and disadvantages of self-employment."
+        },
+        'traffic-lights': {
+            title: 'Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc',
+            storageKey: 'vstep_essay_traffic_lights_draft',
+            prompt: "A pilot programme of removing traffic lights at busy intersections has recently been introduced in some cities as a new approach to traffic management. Some people believe that this measure can reduce traffic congestion, while others argue that it increases the risk of accidents at these intersections. What is your opinion on removing traffic lights at busy intersections?"
+        }
+    };
+
+    let currentEssayTopic = 'children-devices';
+    let currentEssayLevel = 'B1';
+    let essayRemainingSec = 40 * 60;
+    let essayTimerInterval = null;
+
+    function getCurrentEssayStorageKey() {
+        const base = (ESSAY_TOPICS[currentEssayTopic] && ESSAY_TOPICS[currentEssayTopic].storageKey)
+            || 'vstep_essay_children_devices_draft';
+        return getUserScopedKey(base);
+    }
+
+    function renderEssayTimer() {
+        if (!essayTimerDisplay) return;
+        const m = Math.floor(essayRemainingSec / 60).toString().padStart(2, '0');
+        const s = (essayRemainingSec % 60).toString().padStart(2, '0');
+        essayTimerDisplay.textContent = `${m}:${s}`;
+    }
+
+    function resetEssayTimer() {
+        if (essayTimerInterval) {
+            clearInterval(essayTimerInterval);
+            essayTimerInterval = null;
+        }
+        essayRemainingSec = 40 * 60;
+        if (essayTimerBtn) {
+            essayTimerBtn.classList.remove('running', 'warning');
+        }
+        renderEssayTimer();
+    }
+
+    function applyEssayLevel(lv) {
+        currentEssayLevel = lv === 'B2' ? 'B2' : 'B1';
+        essayLevelBtns.forEach(b => {
+            b.classList.toggle('active', b.getAttribute('data-essay-level') === currentEssayLevel);
+        });
+
+        const activeContainer = document.querySelector(`.essay-topic-guides[data-essay-topic="${currentEssayTopic}"]`);
+        if (activeContainer) {
+            const b1Sec = activeContainer.querySelector('[data-topic-level="B1"]');
+            const b2Sec = activeContainer.querySelector('[data-topic-level="B2"]');
+            if (b1Sec) b1Sec.style.display = currentEssayLevel === 'B1' ? 'flex' : 'none';
+            if (b2Sec) b2Sec.style.display = currentEssayLevel === 'B2' ? 'flex' : 'none';
+        }
+
+        if (essayCurrentLevelTag) {
+            essayCurrentLevelTag.textContent = currentEssayLevel === 'B2' ? ' · Level B2' : ' · Level B1';
+        }
+    }
+
+    function updateEssayWordState() {
+        if (!essayTextarea) return;
+        const minW = parseInt(essayTextarea.getAttribute('data-min-words') || '250', 10);
+        const wc = countWordsClean(essayTextarea.value);
+        const needed = Math.max(0, minW - wc);
+        const canSubmit = wc >= minW;
+        const cloudSub = getCloudSubmission(currentEssayTopic);
+        const hasSubmitted = Boolean(cloudSub && cloudSub.is_submitted);
+
+        if (essayWcEl) {
+            essayWcEl.textContent = `${wc} từ`;
+        }
+        if (essayStatusEl) {
+            if (hasSubmitted) {
+                essayStatusEl.textContent = canSubmit
+                    ? `✓ Đã nộp cho Giáo viên (${wc} từ)`
+                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp bản sửa mới`;
+            } else {
+                essayStatusEl.textContent = canSubmit
+                    ? `✓ ${wc}/${minW} từ · Đủ độ dài — bấm Nộp bài để gửi Giáo viên`
+                    : `${wc}/${minW} từ · cần thêm ${needed} từ`;
+            }
+            essayStatusEl.classList.toggle('ready', canSubmit || hasSubmitted);
+        }
+        if (essaySubmitBtn) {
+            essaySubmitBtn.disabled = !canSubmit || authState.isSubmittingEssay;
+            essaySubmitBtn.classList.toggle('unanswered', !canSubmit);
+            if (!authState.isSubmittingEssay) {
+                essaySubmitBtn.textContent = hasSubmitted ? 'Nộp lại' : 'Nộp bài';
+            }
+        }
+    }
+
+    function selectEssayTopic(topicId, options = {}) {
+        const { skipResetTimer = false, skipScroll = false } = options;
+        const topic = ESSAY_TOPICS[topicId] || ESSAY_TOPICS['children-devices'];
+        currentEssayTopic = ESSAY_TOPICS[topicId] ? topicId : 'children-devices';
+
+        // Show matching topic guide container
+        essayTopicContainers.forEach(container => {
+            const isMatch = container.getAttribute('data-essay-topic') === currentEssayTopic;
+            container.style.display = isMatch ? 'block' : 'none';
+        });
+
+        // Update prompt text & topbar label metadata
+        if (essayPromptTextEl) {
+            essayPromptTextEl.textContent = topic.prompt;
+        }
+        if (VIEW_META['viet-luan']) {
+            VIEW_META['viet-luan'].label = topic.title;
+        }
+
+        // Default to Level B1 when opening a topic
+        if (!skipResetTimer) {
+            applyEssayLevel('B1');
+        }
+
+        // Load saved draft or cloud submission for this specific topic
+        const cloudSub = getCloudSubmission(currentEssayTopic);
+        if (essayTextarea) {
+            let savedDraft = '';
+            try {
+                savedDraft = localStorage.getItem(getCurrentEssayStorageKey()) || '';
+            } catch (e) {}
+            if (!savedDraft && cloudSub && cloudSub.content) {
+                savedDraft = cloudSub.content;
+            }
+            essayTextarea.value = savedDraft;
+            updateEssayWordState();
+        }
+
+        renderTeacherFeedbackBox(essayTeacherFeedbackBox, cloudSub);
+
+        if (!skipResetTimer) {
+            resetEssayTimer();
+        }
+
+        if (!skipScroll) {
+            if (essayTheoryScrollPane) essayTheoryScrollPane.scrollTop = 0;
+            if (essayExercisesScrollPane) essayExercisesScrollPane.scrollTop = 0;
+        }
+    }
+
+    // Bind topic opener cards/buttons
+    document.querySelectorAll('[data-open-essay]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const topicId = btn.getAttribute('data-open-essay');
+            selectEssayTopic(topicId);
+            navigateToView('viet-luan');
+        });
+    });
+
+    // 17.1 Level B1 / Level B2 Switcher
+    essayLevelBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyEssayLevel(btn.getAttribute('data-essay-level'));
+            if (essayTheoryScrollPane) {
+                essayTheoryScrollPane.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+    });
+
+    // 17.2 Draggable Split-Screen Resizer for Essay Tab
+    if (essayResizer && essayWorkspace) {
+        let isDraggingEssaySplit = false;
+
+        essayResizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isDraggingEssaySplit = true;
+            essayResizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDraggingEssaySplit) return;
+            const rect = essayWorkspace.getBoundingClientRect();
+            if (rect.width <= 0) return;
+            let pct = ((e.clientX - rect.left) / rect.width) * 100;
+            pct = Math.max(32, Math.min(72, pct));
+            essayWorkspace.style.setProperty('--left-pane-width', `${pct.toFixed(1)}%`);
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (!isDraggingEssaySplit) return;
+            isDraggingEssaySplit = false;
+            essayResizer.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        });
+    }
+
+    // 17.3 Toggle Sample Essay (Show / Hide) for B1 & B2
+    const essaySampleToggleBtns = document.querySelectorAll('[data-essay-sample-toggle]');
+    essaySampleToggleBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-essay-sample-toggle');
+            const body = targetId ? document.getElementById(targetId) : null;
+            if (!body) return;
+            const isHidden = body.style.display === 'none' || window.getComputedStyle(body).display === 'none';
+            body.style.display = isHidden ? 'block' : 'none';
+            btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+            const icon = btn.querySelector('i');
+            if (icon) {
+                icon.className = isHidden ? 'far fa-eye-slash' : 'far fa-eye';
+            }
+            const label = btn.querySelector('span');
+            if (label) {
+                label.textContent = isHidden ? 'Ẩn bài mẫu' : 'Hiện bài mẫu';
+            }
+        });
+    });
+
+    // 17.5 Countdown Timer (40:00 for VSTEP Essay Task 2)
+    if (essayTimerBtn && essayTimerDisplay) {
+        essayTimerBtn.addEventListener('click', () => {
+            if (essayTimerInterval) {
+                clearInterval(essayTimerInterval);
+                essayTimerInterval = null;
+                essayTimerBtn.classList.remove('running');
+                return;
+            }
+            if (essayRemainingSec <= 0) {
+                essayRemainingSec = 40 * 60;
+            }
+            essayTimerBtn.classList.add('running');
+            essayTimerInterval = setInterval(() => {
+                if (essayRemainingSec > 0) {
+                    essayRemainingSec--;
+                    renderEssayTimer();
+                    if (essayRemainingSec <= 300) {
+                        essayTimerBtn.classList.remove('running');
+                        essayTimerBtn.classList.add('warning');
+                    }
+                } else {
+                    clearInterval(essayTimerInterval);
+                    essayTimerInterval = null;
+                    essayTimerDisplay.textContent = 'Hết giờ!';
+                }
+            }, 1000);
+        });
+    }
+
+    // 17.6 Essay Writing Textarea & Word Count
+    if (essayTextarea) {
+        try {
+            const savedEssay = localStorage.getItem(getCurrentEssayStorageKey()) || '';
+            if (savedEssay) {
+                essayTextarea.value = savedEssay;
+            }
+        } catch (e) {}
+        updateEssayWordState();
+
+        essayTextarea.addEventListener('input', () => {
+            updateEssayWordState();
+            try {
+                localStorage.setItem(getCurrentEssayStorageKey(), essayTextarea.value);
+            } catch (e) {}
+        });
+    }
+
+    if (essaySubmitBtn) {
+        essaySubmitBtn.addEventListener('click', async () => {
+            const content = essayTextarea ? essayTextarea.value.trim() : '';
+            const wc = countWordsClean(content);
+            if (wc < 250 || authState.isSubmittingEssay) return;
+
+            const topic = ESSAY_TOPICS[currentEssayTopic] || ESSAY_TOPICS['children-devices'];
+            const lessonId = currentEssayTopic;
+            const lessonTitle = getCatalogLessonTitle(lessonId, `Task 02 · ${topic.title}`);
+
+            authState.isSubmittingEssay = true;
+            essaySubmitBtn.disabled = true;
+            essaySubmitBtn.textContent = 'Đang nộp...';
+
+            const res = await submitWritingToCloud({
+                taskType: 'task2',
+                lessonId,
+                lessonTitle,
+                promptText: topic.prompt || '',
+                content,
+                wordCount: wc,
+                targetLevel: currentEssayLevel
+            });
+
+            authState.isSubmittingEssay = false;
+
+            if (!res.ok) {
+                essaySubmitBtn.disabled = false;
+                essaySubmitBtn.textContent = getCloudSubmission(lessonId) ? 'Nộp lại' : 'Nộp bài';
+                if (essayStatusEl) {
+                    essayStatusEl.textContent = `⚠️ Lỗi gửi bài lên Giáo viên: ${res.error}`;
+                    essayStatusEl.classList.remove('ready');
+                }
+                return;
+            }
+
+            renderTeacherFeedbackBox(essayTeacherFeedbackBox, res.row);
+            updateEssayWordState();
+            if (essayTeacherFeedbackBox && essayTeacherFeedbackBox.style.display !== 'none') {
+                essayTeacherFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
+    }
+
+    if (essayResetBtn && essayTextarea) {
+        essayResetBtn.addEventListener('click', () => {
+            if (essayTextarea.value.trim().length > 0) {
+                if (!confirm('Bạn có chắc muốn xoá nội dung đang viết để viết lại từ đầu?')) {
+                    return;
+                }
+            }
+            essayTextarea.value = '';
+            try {
+                localStorage.removeItem(getCurrentEssayStorageKey());
+            } catch (e) {}
+            updateEssayWordState();
+            essayTextarea.focus();
+        });
+    }
+
+    // --- 18. Supabase Auth Gate, Mandatory Profile Setup & Session Bootstrap ---
+    const authGateEl = document.getElementById('writing-auth-gate');
+    const mainAppLayout = document.getElementById('main-app-layout');
+    const topbarTeacherLink = document.getElementById('topbar-teacher-link');
+    const topbarAccountPill = document.getElementById('topbar-account-pill');
+    const topbarUserInitials = document.getElementById('topbar-user-initials');
+    const topbarUserName = document.getElementById('topbar-user-name');
+    const topbarUserClass = document.getElementById('topbar-user-class');
+
+    function syncTopbarAccountUI() {
+        if (!currentAccount) {
+            if (topbarTeacherLink) topbarTeacherLink.style.display = 'none';
+            if (topbarAccountPill) topbarAccountPill.style.display = 'none';
+            return;
+        }
+        if (topbarTeacherLink) {
+            topbarTeacherLink.style.display = authState.isTeacher ? 'inline-flex' : 'none';
+        }
+        if (topbarAccountPill) {
+            topbarAccountPill.style.display = 'inline-flex';
+        }
+        if (topbarUserInitials && CLOUD) {
+            topbarUserInitials.textContent = CLOUD.getInitials(currentAccount.name);
+        }
+        if (topbarUserName) {
+            topbarUserName.textContent = currentAccount.name || currentAccount.email;
+        }
+        if (topbarUserClass) {
+            if (currentAccount.className) {
+                topbarUserClass.textContent = `Lớp ${currentAccount.className}`;
+                topbarUserClass.style.display = 'inline-flex';
+            } else {
+                topbarUserClass.style.display = 'none';
+            }
+        }
+    }
+
+    function hydrateWritingViewsFromCloud() {
+        selectAdvicePrompt(currentAdvicePromptId, { skipScroll: true });
+        selectEssayTopic(currentEssayTopic, { skipResetTimer: true, skipScroll: true });
+    }
+
+    async function handleSignOut(askConfirm = false) {
+        if (askConfirm && !confirm('Bạn có muốn đăng xuất khỏi tài khoản hiện tại?')) {
+            return;
+        }
+        const client = CLOUD ? CLOUD.getClient() : null;
+        if (client) {
+            try {
+                await client.auth.signOut();
+            } catch (e) {}
+        }
+        currentAccount = null;
+        authState.isTeacher = false;
+        authState.needsProfileSetup = false;
+        authState.submissionsByLessonId = {};
+        authState.authMode = 'login';
+        authState.authError = '';
+        authState.authInfo = '';
+        authState.authLoading = false;
+        if (adviceTextarea) adviceTextarea.value = '';
+        if (essayTextarea) essayTextarea.value = '';
+        renderTeacherFeedbackBox(adviceTeacherFeedbackBox, null);
+        renderTeacherFeedbackBox(essayTeacherFeedbackBox, null);
+        navigateToView('home-dashboard');
+        renderAuthGate();
+    }
+
+    if (topbarAccountPill) {
+        topbarAccountPill.addEventListener('click', () => {
+            handleSignOut(true);
+        });
+    }
+
+    function renderAuthCardHtml() {
+        const esc = CLOUD.escapeHtml;
+        const isReg = authState.authMode === 'register';
+        return `
+            <div class="auth-wrapper">
+                <div class="auth-card-box">
+                    <div style="margin-bottom:10px;">
+                        <span class="auth-badge-tag">VSTEP WRITING · TÀI KHOẢN HỌC VIÊN</span>
+                    </div>
+
+                    <h1 style="font-size:22px;font-weight:900;color:#18181B;margin-bottom:6px;">
+                        ${isReg ? 'Tạo tài khoản học viên' : 'Đăng nhập học tập'}
+                    </h1>
+                    <p style="font-size:13.5px;color:#52525B;line-height:1.5;margin-bottom:16px;">
+                        ${isReg
+                            ? 'Đăng nhập nhanh bằng Google hoặc tạo tài khoản để luyện viết Task 01 & Task 02 và nộp bài trực tiếp cho Giáo viên.'
+                            : 'Đăng nhập bằng tài khoản Google hoặc email của bạn để tiếp tục luyện viết và xem nhận xét từ Giáo viên.'}
+                    </p>
+
+                    <button type="button" class="google-auth-btn" id="btn-google-login" ${authState.authLoading ? 'disabled' : ''}>
+                        ${CLOUD.renderGoogleIconSvg(19)}
+                        <span>${authState.authLoading ? 'Đang kết nối tới Google...' : 'Tiếp tục với Google'}</span>
+                    </button>
+
+                    <div class="auth-or-divider">
+                        <span>Hoặc dùng tài khoản Email</span>
+                    </div>
+
+                    <div class="auth-tabs-row">
+                        <button type="button" class="auth-tab ${!isReg ? 'active' : ''}" id="btn-tab-login">Đăng nhập</button>
+                        <button type="button" class="auth-tab ${isReg ? 'active' : ''}" id="btn-tab-register">Tạo tài khoản mới</button>
+                    </div>
+
+                    ${authState.authError
+                        ? `<div style="padding:8px 12px;border:1.5px solid #DC2626;background:#FEF2F2;color:#B91C1C;font-size:12.5px;font-weight:700;margin-bottom:12px;">⚠️ ${esc(authState.authError)}</div>`
+                        : ''}
+                    ${authState.authInfo
+                        ? `<div style="padding:8px 12px;border:1.5px solid #16A34A;background:#F0FDF4;color:#166534;font-size:12.5px;font-weight:700;margin-bottom:12px;">✓ ${esc(authState.authInfo)}</div>`
+                        : ''}
+
+                    <form id="auth-form" onsubmit="return false;">
+                        ${isReg
+                            ? `
+                                <div class="form-field">
+                                    <label class="form-label" for="inp-auth-name">Họ và tên đầy đủ</label>
+                                    <input type="text" id="inp-auth-name" class="form-input" placeholder="Ví dụ: Nguyễn Minh Tùng" required />
+                                </div>
+
+                                <div class="form-field">
+                                    <label class="form-label">Chọn lớp học của bạn *</label>
+                                    <div class="class-select-grid">
+                                        ${CLOUD.CLASS_LIST.map(cls => `
+                                            <button
+                                                type="button"
+                                                class="class-option-btn ${authState.regSelectedClass === cls ? 'active' : ''}"
+                                                data-reg-class="${cls}"
+                                            >Lớp ${cls}</button>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `
+                            : ''}
+
+                        <div class="form-field">
+                            <label class="form-label" for="inp-auth-email">Email</label>
+                            <input type="email" id="inp-auth-email" class="form-input" placeholder="Nhập email của bạn..." required />
+                        </div>
+
+                        <div class="form-field">
+                            <label class="form-label" for="inp-auth-pass">Mật khẩu</label>
+                            <input type="password" id="inp-auth-pass" class="form-input" placeholder="Nhập mật khẩu..." required />
+                        </div>
+
+                        <button type="submit" class="form-submit-btn" ${authState.authLoading ? 'disabled' : ''}>
+                            ${isReg ? 'Tạo tài khoản & Vào học →' : 'Đăng nhập →'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderProfileSetupHtml() {
+        const esc = CLOUD.escapeHtml;
+        return `
+            <div class="auth-wrapper">
+                <div class="auth-card-box">
+                    <div style="margin-bottom:10px;">
+                        <span class="auth-badge-tag">THÔNG TIN HỌC VIÊN · BẮT BUỘC</span>
+                    </div>
+
+                    <h1 style="font-size:21px;font-weight:900;color:#18181B;margin-bottom:6px;">
+                        Hoàn tất thông tin học viên
+                    </h1>
+                    <p style="font-size:13.5px;color:#52525B;line-height:1.5;margin-bottom:16px;">
+                        Vui lòng nhập đầy đủ <strong>Họ và tên</strong> và chọn đúng <strong>Lớp</strong> của bạn để Giáo viên nhận diện và chấm bài viết chính xác.
+                    </p>
+
+                    ${authState.isTeacher
+                        ? `
+                            <div style="margin-bottom:14px;">
+                                <a href="./teacher.html" class="top-pill-btn teacher-nav-pill" style="width:100%;justify-content:center;height:38px;">
+                                    👨‍🏫 Vào thẳng Trang Giáo viên →
+                                </a>
+                            </div>
+                        `
+                        : ''}
+
+                    ${authState.profileFormError
+                        ? `<div style="padding:8px 12px;border:1.5px solid #DC2626;background:#FEF2F2;color:#B91C1C;font-size:12.5px;font-weight:700;margin-bottom:12px;">⚠️ ${esc(authState.profileFormError)}</div>`
+                        : ''}
+
+                    <form id="profile-setup-form" onsubmit="return false;">
+                        <div class="form-field">
+                            <label class="form-label" for="inp-setup-fullname">Họ và tên đầy đủ *</label>
+                            <input
+                                type="text"
+                                id="inp-setup-fullname"
+                                class="form-input"
+                                placeholder="Ví dụ: Nguyễn Văn An"
+                                value="${esc(authState.profileFormName)}"
+                                required
+                            />
+                        </div>
+
+                        <div class="form-field" style="margin-bottom:16px;">
+                            <label class="form-label">Chọn lớp của bạn *</label>
+                            <div class="class-select-grid">
+                                ${CLOUD.CLASS_LIST.map(cls => `
+                                    <button
+                                        type="button"
+                                        class="class-option-btn ${authState.profileFormClass === cls ? 'active' : ''}"
+                                        data-setup-class="${cls}"
+                                    >Lớp ${cls}</button>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <button type="submit" class="form-submit-btn" ${authState.profileSaving ? 'disabled' : ''}>
+                            ${authState.profileSaving ? 'Đang lưu thông tin...' : 'Lưu thông tin & Vào học →'}
+                        </button>
+
+                        <button
+                            type="button"
+                            id="btn-logout-account"
+                            style="width:100%;height:36px;margin-top:8px;border:none;background:transparent;color:#71717A;font-weight:600;font-size:12.5px;cursor:pointer;"
+                        >
+                            Đăng xuất tài khoản khác
+                        </button>
+                    </form>
+                </div>
+            </div>
+        `;
+    }
+
+    function bindAuthGateEvents() {
+        const btnTabLogin = document.getElementById('btn-tab-login');
+        if (btnTabLogin) {
+            btnTabLogin.onclick = () => {
+                authState.authMode = 'login';
+                authState.authError = '';
+                renderAuthGate();
+            };
+        }
+
+        const btnTabReg = document.getElementById('btn-tab-register');
+        if (btnTabReg) {
+            btnTabReg.onclick = () => {
+                authState.authMode = 'register';
+                authState.authError = '';
+                renderAuthGate();
+            };
+        }
+
+        const btnGoogleLogin = document.getElementById('btn-google-login');
+        if (btnGoogleLogin) {
+            btnGoogleLogin.onclick = async () => {
+                authState.authError = '';
+                authState.authInfo = '';
+                authState.authLoading = true;
+                renderAuthGate();
+                const { error } = await CLOUD.signInWithGoogle();
+                if (error) {
+                    authState.authLoading = false;
+                    authState.authError = 'Không thể mở đăng nhập Google: ' + (error.message || 'Lỗi kết nối');
+                    renderAuthGate();
+                }
+            };
+        }
+
+        document.querySelectorAll('[data-reg-class]').forEach(btn => {
+            btn.onclick = () => {
+                authState.regSelectedClass = btn.getAttribute('data-reg-class');
+                document.querySelectorAll('[data-reg-class]').forEach(b => {
+                    b.classList.toggle('active', b === btn);
+                });
+            };
+        });
+
+        document.querySelectorAll('[data-setup-class]').forEach(btn => {
+            btn.onclick = () => {
+                authState.profileFormClass = btn.getAttribute('data-setup-class');
+                document.querySelectorAll('[data-setup-class]').forEach(b => {
+                    b.classList.toggle('active', b === btn);
+                });
+            };
+        });
+
+        const authForm = document.getElementById('auth-form');
+        if (authForm) {
+            authForm.onsubmit = async e => {
+                e.preventDefault();
+                const client = CLOUD.getClient();
+                if (!client) {
+                    authState.authError = 'Chưa cấu hình kết nối Supabase.';
+                    renderAuthGate();
+                    return;
+                }
+                const nameEl = document.getElementById('inp-auth-name');
+                const emailEl = document.getElementById('inp-auth-email');
+                const passEl = document.getElementById('inp-auth-pass');
+                const name = (nameEl ? nameEl.value : '').trim();
+                const email = (emailEl ? emailEl.value : '').trim().toLowerCase();
+                const password = (passEl ? passEl.value : '').trim();
+                const chosenClass = authState.regSelectedClass || CLOUD.CLASS_LIST[0];
+
+                if (!email || !password) {
+                    authState.authError = 'Vui lòng nhập đầy đủ Email và Mật khẩu.';
+                    authState.authInfo = '';
+                    renderAuthGate();
+                    return;
+                }
+
+                authState.authLoading = true;
+                authState.authError = '';
+                authState.authInfo = '';
+                renderAuthGate();
+
+                if (authState.authMode === 'register') {
+                    if (!name) {
+                        authState.authLoading = false;
+                        authState.authError = 'Vui lòng nhập đầy đủ họ và tên của bạn.';
+                        renderAuthGate();
+                        return;
+                    }
+                    if (password.length < 6) {
+                        authState.authLoading = false;
+                        authState.authError = 'Mật khẩu cần tối thiểu 6 ký tự.';
+                        renderAuthGate();
+                        return;
+                    }
+                    const { data, error } = await client.auth.signUp({
+                        email,
+                        password,
+                        options: {
+                            data: {
+                                full_name: CLOUD.formatStoredFullName(name, chosenClass),
+                                class_name: chosenClass
+                            },
+                            emailRedirectTo: CLOUD.getRedirectUrl()
+                        }
+                    });
+                    authState.authLoading = false;
+                    if (error) {
+                        authState.authError = error.message || 'Không thể tạo tài khoản. Vui lòng thử lại.';
+                        renderAuthGate();
+                        return;
+                    }
+                    if (data && data.session && data.user) {
+                        await loadCloudStudentData(data.user);
+                    } else {
+                        authState.authInfo =
+                            "Đăng ký thành công! Vui lòng mở hộp thư Email để xác nhận tài khoản, hoặc bấm 'Tiếp tục với Google' để vào học ngay.";
+                        authState.authMode = 'login';
+                        renderAuthGate();
+                    }
+                } else {
+                    const { data, error } = await client.auth.signInWithPassword({ email, password });
+                    authState.authLoading = false;
+                    if (error) {
+                        authState.authError = 'Email hoặc mật khẩu chưa đúng (hoặc tài khoản chưa xác nhận email).';
+                        renderAuthGate();
+                        return;
+                    }
+                    if (data && data.user) {
+                        await loadCloudStudentData(data.user);
+                    }
+                }
+            };
+        }
+
+        const profileSetupForm = document.getElementById('profile-setup-form');
+        if (profileSetupForm) {
+            profileSetupForm.onsubmit = async e => {
+                e.preventDefault();
+                const client = CLOUD.getClient();
+                if (!client || !currentAccount) return;
+
+                const nameInp = document.getElementById('inp-setup-fullname');
+                const cleanName = (nameInp ? nameInp.value : authState.profileFormName).trim();
+                const chosenClass = String(authState.profileFormClass || '').trim().toUpperCase();
+
+                authState.profileFormName = cleanName;
+                if (!cleanName) {
+                    authState.profileFormError = 'Vui lòng nhập đầy đủ họ và tên của bạn.';
+                    renderAuthGate();
+                    return;
+                }
+                if (!CLOUD.CLASS_LIST.includes(chosenClass)) {
+                    authState.profileFormError = 'Vui lòng chọn lớp của bạn (ONB204 hoặc CB221).';
+                    renderAuthGate();
+                    return;
+                }
+
+                const storedFullName = CLOUD.formatStoredFullName(cleanName, chosenClass);
+                authState.profileSaving = true;
+                authState.profileFormError = '';
+                renderAuthGate();
+
+                const { error: profErr } = await client.from('profiles').upsert(
+                    {
+                        id: currentAccount.id,
+                        email: currentAccount.email,
+                        full_name: storedFullName,
+                        last_active_at: new Date().toISOString()
+                    },
+                    { onConflict: 'id' }
+                );
+
+                authState.profileSaving = false;
+                if (profErr) {
+                    authState.profileFormError = 'Không lưu được thông tin: ' + profErr.message;
+                    renderAuthGate();
+                    return;
+                }
+
+                try {
+                    await client.auth.updateUser({
+                        data: { full_name: storedFullName, class_name: chosenClass }
+                    });
+                } catch (err) {}
+
+                currentAccount.name = cleanName;
+                currentAccount.className = chosenClass;
+                authState.needsProfileSetup = false;
+                renderAuthGate();
+            };
+        }
+
+        const btnLogout = document.getElementById('btn-logout-account');
+        if (btnLogout) {
+            btnLogout.onclick = () => handleSignOut(false);
+        }
+    }
+
+    function renderAuthGate() {
+        if (!authGateEl || !mainAppLayout) return;
+        if (!CLOUD) {
+            authGateEl.style.display = 'none';
+            mainAppLayout.style.display = '';
+            return;
+        }
+        if (currentAccount && !authState.needsProfileSetup) {
+            authGateEl.style.display = 'none';
+            authGateEl.innerHTML = '';
+            mainAppLayout.style.display = '';
+            syncTopbarAccountUI();
+            return;
+        }
+        mainAppLayout.style.display = 'none';
+        authGateEl.style.display = 'block';
+        authGateEl.innerHTML = currentAccount && authState.needsProfileSetup
+            ? renderProfileSetupHtml()
+            : renderAuthCardHtml();
+        bindAuthGateEvents();
+    }
+
+    async function loadCloudStudentData(sessionUser) {
+        const client = CLOUD ? CLOUD.getClient() : null;
+        if (!client || !sessionUser) return;
+
+        const uid = sessionUser.id;
+        const email = String(sessionUser.email || '').trim().toLowerCase();
+        const wantsPracticeMode = new URLSearchParams(window.location.search).get('mode') === 'practice';
+        const isPrimaryTeacherEmail = email === 'mtung0208@gmail.com';
+
+        // Tự động chuyển thẳng tài khoản Giáo viên (mtung0208@gmail.com) vào Trang Giáo viên
+        if (isPrimaryTeacherEmail && !wantsPracticeMode) {
+            window.location.replace('./teacher.html');
+            return;
+        }
+
+        const meta = sessionUser.user_metadata || {};
+        const appMeta = sessionUser.app_metadata || {};
+        const fallbackName =
+            String(meta.full_name || meta.name || '').trim() ||
+            email
+                .split('@')[0]
+                .replace(/[._-]+/g, ' ')
+                .replace(/\b\w/g, c => c.toUpperCase());
+        const avatarUrl = meta.avatar_url || meta.picture || '';
+        const provider = appMeta.provider || 'email';
+
+        authState.authLoading = true;
+        renderAuthGate();
+
+        const [profileRes, subsRes, teacherRes] = await Promise.all([
+            client.from('profiles').select('*').eq('id', uid).maybeSingle(),
+            client.from('writing_submissions').select('*').eq('user_id', uid),
+            client.rpc('is_teacher')
+        ]);
+
+        authState.isTeacher = Boolean(teacherRes && !teacherRes.error && teacherRes.data === true) || isPrimaryTeacherEmail;
+
+        if (authState.isTeacher && !wantsPracticeMode) {
+            window.location.replace('./teacher.html');
+            return;
+        }
+
+        // Prefer existing full_name in profiles table so Google login metadata never overwrites student edits
+        const rawStoredName =
+            profileRes && profileRes.data && profileRes.data.full_name
+                ? profileRes.data.full_name
+                : fallbackName;
+        const parsed = CLOUD.parseFullNameAndClass(rawStoredName);
+        const metaClass = String(meta.class_name || '').trim().toUpperCase();
+        const resolvedClass = parsed.className || (CLOUD.CLASS_LIST.includes(metaClass) ? metaClass : '');
+        const resolvedName = parsed.fullName || fallbackName;
+        const storedFullName = CLOUD.formatStoredFullName(resolvedName, resolvedClass);
+
+        try {
+            await client.from('profiles').upsert(
+                {
+                    id: uid,
+                    email: email,
+                    full_name: storedFullName,
+                    avatar_url: avatarUrl,
+                    auth_provider: provider,
+                    last_active_at: new Date().toISOString()
+                },
+                { onConflict: 'id' }
+            );
+        } catch (e) {}
+
+        const subsMap = {};
+        if (Array.isArray(subsRes.data)) {
+            subsRes.data.forEach(row => {
+                if (row && row.lesson_id) {
+                    subsMap[row.lesson_id] = row;
+                }
+            });
+        }
+
+        currentAccount = {
+            id: uid,
+            name: resolvedName,
+            className: resolvedClass,
+            email: email
+        };
+
+        authState.submissionsByLessonId = subsMap;
+        authState.needsProfileSetup = !resolvedClass && !authState.isTeacher;
+        authState.profileFormName = resolvedName;
+        authState.profileFormClass = resolvedClass || CLOUD.CLASS_LIST[0];
+        authState.profileFormError = '';
+        authState.authError = '';
+        authState.authInfo = '';
+        authState.authLoading = false;
+
+        hydrateWritingViewsFromCloud();
+        renderAuthGate();
+    }
+
+    (async function bootstrapWritingAuth() {
+        if (!CLOUD) {
+            renderAuthGate();
+            return;
+        }
+        const client = CLOUD.getClient();
+        if (!client) {
+            authState.authError = 'Chưa cấu hình kết nối Supabase.';
+            renderAuthGate();
+            return;
+        }
+
+        renderAuthGate();
+        const { data } = await client.auth.getSession();
+        if (data && data.session && data.session.user) {
+            await loadCloudStudentData(data.session.user);
+        }
+
+        client.auth.onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_IN' && session && session.user) {
+                if (!currentAccount || currentAccount.id !== session.user.id) {
+                    await loadCloudStudentData(session.user);
+                }
+            } else if (event === 'SIGNED_OUT') {
+                currentAccount = null;
+                authState.isTeacher = false;
+                authState.needsProfileSetup = false;
+                authState.submissionsByLessonId = {};
+                renderAuthGate();
+            }
+        });
+    })();
 });
 
 // --- 9. Collapsible Prompt List ---
