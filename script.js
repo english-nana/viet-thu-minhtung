@@ -385,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (viewId === 'task1-hub') {
                 dashboardCrumbEl.textContent = 'Task 01 · 8 bài học';
             } else if (viewId === 'task2-hub') {
-                dashboardCrumbEl.textContent = 'Task 02 · 6 mục';
+                dashboardCrumbEl.textContent = 'Task 02 · 7 mục';
             } else if (viewId === 'my-submissions') {
                 dashboardCrumbEl.textContent = 'Bài viết đã nộp';
             } else {
@@ -504,7 +504,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: 'Chủ đề 2: Thời trang nhanh & Môi trường', sub: 'Fast Fashion & the Environment · Causes & Solutions', tag: 'Task 02', essay: 'fast-fashion' },
         { title: 'Chủ đề 3: Lựa chọn công việc & Sự hài lòng', sub: 'Choosing a Job & Job Satisfaction · Opinion', tag: 'Task 02', essay: 'choosing-job' },
         { title: 'Chủ đề 4: Tự kinh doanh / Tự làm chủ', sub: 'Self-Employment · Advantages & Disadvantages', tag: 'Task 02', essay: 'self-employment' },
-        { title: 'Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc', sub: 'Removing Traffic Lights · Opinion', tag: 'Task 02', essay: 'traffic-lights' }
+        { title: 'Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc', sub: 'Removing Traffic Lights · Opinion', tag: 'Task 02', essay: 'traffic-lights' },
+        { title: 'Chủ đề 6: Sự gia tăng lượng khách du lịch', sub: 'Growth in Tourist Numbers · Advantages & Disadvantages', tag: 'Task 02', essay: 'tourism-growth' }
     ];
 
     function normalizeSearchText(str) {
@@ -2223,6 +2224,11 @@ document.addEventListener('DOMContentLoaded', () => {
             title: 'Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc',
             storageKey: 'vstep_essay_traffic_lights_draft',
             prompt: "A pilot programme of removing traffic lights at busy intersections has recently been introduced in some cities as a new approach to traffic management. Some people believe that this measure can reduce traffic congestion, while others argue that it increases the risk of accidents at these intersections. What is your opinion on removing traffic lights at busy intersections?"
+        },
+        'tourism-growth': {
+            title: 'Chủ đề 6: Sự gia tăng lượng khách du lịch',
+            storageKey: 'vstep_essay_tourism_growth_draft',
+            prompt: "In recent years, many popular destinations around the world have experienced a significant rise in the number of tourists visiting each year. While this growth in tourism brings notable economic benefits to local communities, it also raises a number of concerns regarding the environment and the quality of life for residents. Discuss the advantages and disadvantages of this increase in tourist numbers."
         }
     };
 

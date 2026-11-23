@@ -14,7 +14,8 @@
     { id: "fast-fashion", taskType: "task2", title: "Task 02 · Chủ đề 2: Thời trang nhanh & Môi trường" },
     { id: "choosing-job", taskType: "task2", title: "Task 02 · Chủ đề 3: Lựa chọn công việc & Sự hài lòng" },
     { id: "self-employment", taskType: "task2", title: "Task 02 · Chủ đề 4: Tự kinh doanh / Tự làm chủ" },
-    { id: "traffic-lights", taskType: "task2", title: "Task 02 · Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc" }
+    { id: "traffic-lights", taskType: "task2", title: "Task 02 · Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc" },
+    { id: "tourism-growth", taskType: "task2", title: "Task 02 · Chủ đề 6: Sự gia tăng lượng khách du lịch" }
   ];
 
   let cachedClient = null;
