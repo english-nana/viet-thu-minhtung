@@ -243,21 +243,45 @@ Deno.serve(async (req: Request) => {
       targetLevel: sub.target_level || "B1"
     });
 
-    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
-    const geminiRes = await fetch(geminiEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.25,
-          responseMimeType: "application/json"
-        }
-      })
-    });
+    const fallbackModels = Array.from(
+      new Set([geminiModel, "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"])
+    );
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text().catch(() => "");
+    let geminiRes: Response | null = null;
+    let lastStatus = 500;
+    let lastErrText = "";
+
+    for (const modelName of fallbackModels) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.25,
+              responseMimeType: "application/json"
+            }
+          })
+        });
+        if (res.ok) {
+          geminiRes = res;
+          break;
+        }
+        lastStatus = res.status;
+        lastErrText = await res.text().catch(() => "");
+        // Chỉ retry trên cùng model khi bị quá tải tạm thời (503 / 429 / 500)
+        if ((res.status === 503 || res.status === 429 || res.status === 500) && attempt === 0) {
+          await new Promise(r => setTimeout(r, 1200));
+          continue;
+        }
+        break;
+      }
+      if (geminiRes) break;
+    }
+
+    if (!geminiRes) {
       await admin.from("writing_ai_reviews").upsert(
         {
           submission_id: submissionId,
@@ -268,7 +292,7 @@ Deno.serve(async (req: Request) => {
           target_level: sub.target_level || "B1",
           status: "error",
           release_at: releaseAtIso,
-          error_message: `Gemini API lỗi (${geminiRes.status}): ${errText.slice(0, 240)}`,
+          error_message: `Gemini API lỗi (${lastStatus}): ${lastErrText.slice(0, 240)}`,
           grade_count: prevCount,
           updated_at: nowIso
         },
@@ -279,7 +303,7 @@ Deno.serve(async (req: Request) => {
         .update({ ai_status: "error" })
         .eq("id", submissionId);
 
-      return jsonResponse({ ok: false, error: `Lỗi kết nối AI (${geminiRes.status}).` }, 502);
+      return jsonResponse({ ok: false, error: `Lỗi kết nối AI (${lastStatus}): ${lastErrText.slice(0, 140)}` }, 502);
     }
 
     const geminiJson = await geminiRes.json();
