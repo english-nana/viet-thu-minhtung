@@ -182,6 +182,47 @@
     }
   }
 
+  async function invokeProcessQueue(batchSize) {
+    const client = getClient();
+    const cfg = window.SUPABASE_CONFIG || {};
+    const baseUrl = String(cfg.url || "").trim().replace(/\/+$/, "");
+    const anonKey = String(cfg.anonKey || "").trim();
+    if (!client || !baseUrl || !anonKey) {
+      return { ok: false, error: "Chưa kết nối Supabase." };
+    }
+    try {
+      const { data: sessionData } = await client.auth.getSession();
+      const accessToken = sessionData && sessionData.session ? sessionData.session.access_token : "";
+      if (!accessToken) {
+        return { ok: false, error: "Phiên đăng nhập đã hết hạn." };
+      }
+      const res = await fetch(`${baseUrl}/functions/v1/grade-writing`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey,
+          "Authorization": `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          mode: "process_queue",
+          batch_size: batchSize || 5
+        })
+      });
+      const rawText = await res.text().catch(() => "");
+      let parsed = null;
+      try {
+        parsed = rawText ? JSON.parse(rawText) : null;
+      } catch (e) {}
+      if (!res.ok || !parsed || parsed.ok !== true) {
+        const detail = (parsed && (parsed.error || parsed.message)) || rawText.slice(0, 200) || `HTTP ${res.status}`;
+        return { ok: false, error: `[HTTP ${res.status}] ${detail}` };
+      }
+      return parsed;
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : "Lỗi chạy hàng đợi chấm bài." };
+    }
+  }
+
   function getCategoryBadgeClass(cat) {
     const lower = String(cat || "").toLowerCase();
     if (lower.includes("chính tả") || lower.includes("spell")) return "cat-spelling";
@@ -397,6 +438,7 @@
     getInitials,
     renderGoogleIconSvg,
     invokeGradeWriting,
+    invokeProcessQueue,
     renderWritingReviewHtml
   };
 })();

@@ -17,8 +17,8 @@
 </head>
 <body>
   <div id="teacher-app"></div>
-  <script src="./supabase-config.js?v=2.7"></script>
-  <script src="./supabase-client.js?v=2.7"></script>
+  <script src="./supabase-config.js?v=2.9"></script>
+  <script src="./supabase-client.js?v=2.9"></script>
   <script>
     (function () {
       const CLOUD = window.WritingCloud;
@@ -34,6 +34,7 @@
         deletingUserId: "",
         gradingSubId: "",
         releasingSubId: "",
+        flushingQueue: false,
         authError: "",
         dbError: "",
         activeTab: "submissions", // "submissions" | "students"
@@ -254,6 +255,21 @@
           return;
         }
         await refreshCloudDashboardData();
+      }
+
+      async function flushPendingQueueNow() {
+        if (tState.flushingQueue) return;
+        tState.flushingQueue = true;
+        renderTeacherApp();
+        const res = await CLOUD.invokeProcessQueue(5);
+        tState.flushingQueue = false;
+        if (!res.ok) {
+          renderTeacherApp();
+          alert("Không chạy được hàng đợi chấm bài: " + (res.error || "Lỗi không xác định"));
+          return;
+        }
+        await refreshCloudDashboardData();
+        alert(`Đã xử lý ${res.processed || 0} bài chờ: thành công ${res.succeeded || 0} bài, còn chờ thử lại ${res.failed || 0} bài.`);
       }
 
       async function deleteStudentAccount(studentId, studentName, studentEmail) {
@@ -557,6 +573,7 @@
         const totalSubmitted = tState.submissions.filter(s => s.isSubmitted).length;
         const totalUngraded = tState.submissions.filter(s => s.isSubmitted && !s.teacherFeedback && !s.teacherScore).length;
         const totalGraded = tState.submissions.filter(s => s.isSubmitted && (s.teacherFeedback || s.teacherScore)).length;
+        const pendingAiCount = tState.submissions.filter(s => s.isSubmitted && (!s.aiReview || s.aiReview.status !== "ready")).length;
 
         return `
           <div class="teacher-page-shell">
@@ -568,6 +585,13 @@
 
               <div class="teacher-topbar-actions">
                 <a href="./index.html?mode=practice" class="top-pill-btn">← Về trang luyện tập</a>
+                ${
+                  pendingAiCount > 0
+                    ? `<button type="button" class="top-pill-btn yellow" id="btn-flush-queue" ${tState.flushingQueue ? "disabled" : ""}>
+                        ${tState.flushingQueue ? "⏳ Đang chấm hàng đợi..." : `🔄 Chấm bài chờ (${pendingAiCount})`}
+                      </button>`
+                    : ""
+                }
                 <button type="button" class="top-pill-btn" id="btn-refresh-data">
                   ${tState.loading ? "⏳ Đang tải..." : "↻ Làm mới"}
                 </button>
@@ -769,7 +793,10 @@
                           } else if (hasReadyReview) {
                             statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#166534;">✅ Đã trả bài sửa cho học viên (${escapeHtml(CLOUD.formatDateTime(rev.release_at))}) · ${rev.student_seen_at ? "Học viên đã xem" : "Học viên chưa xem"}</span>`;
                           } else if (rev && rev.status === "error") {
-                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B91C1C;">⚠️ Lỗi chấm AI: ${escapeHtml(rev.error_message || "Thử chấm lại")}</span>`;
+                            const tries = rev.retry_count || 1;
+                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B45309;">🔄 AI tạm quá tải (lần thử ${tries}/20) — hệ thống sẽ tự động chấm lại mỗi 5 phút trước giờ trả bài.</span>`;
+                          } else if (sub.aiStatus === "pending" || sub.aiStatus === "pending_retry") {
+                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đang nằm trong hàng đợi tự động chấm (hẹn trả sau 12 tiếng).</span>`;
                           }
 
                           return `
@@ -912,6 +939,11 @@
         const btnRefresh = document.getElementById("btn-refresh-data");
         if (btnRefresh) {
           btnRefresh.onclick = () => refreshCloudDashboardData();
+        }
+
+        const btnFlushQueue = document.getElementById("btn-flush-queue");
+        if (btnFlushQueue) {
+          btnFlushQueue.onclick = () => flushPendingQueueNow();
         }
 
         const btnExportCsv = document.getElementById("btn-export-csv");

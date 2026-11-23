@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="writing-tf-title">✓ Đã gửi bài viết thành công${submittedTime ? ` lúc ${esc(submittedTime)}` : ''}</span>
                             <span class="writing-tf-score">${esc(String(sub.word_count || 0))} từ · Level ${esc(sub.target_level || 'B1')}</span>
                         </div>
-                        <p class="writing-tf-comment">Bài viết đã được lưu trên hệ thống. Khi có bài sửa chi tiết hoặc nhận xét từ Giáo viên, thông báo sẽ hiện ở biểu tượng chuông 🔔 và hiển thị ngay tại đây.</p>
+                        <p class="writing-tf-comment">Bài sửa chi tiết của bạn đang được hoàn tất. Thông báo sẽ tự động hiện ở biểu tượng chuông 🔔 trên góc phải ngay khi bài sửa sẵn sàng.</p>
                     </div>
                 `);
             }

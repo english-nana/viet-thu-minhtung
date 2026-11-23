@@ -156,7 +156,7 @@ create policy "Writing: student delete own or teacher delete"
   on public.writing_submissions for delete
   using (auth.uid() = user_id or public.is_teacher());
 
--- Bảo vệ cột điểm, nhận xét giáo viên và lịch trả bài sửa (chỉ teacher/service_role mới đổi được)
+-- Bảo vệ cột điểm, nhận xét giáo viên và tự động đưa bài mới/bài nộp lại vào hàng đợi chấm 12 tiếng
 create or replace function public.protect_writing_teacher_fields()
 returns trigger
 language plpgsql
@@ -165,10 +165,32 @@ set search_path = public
 as $$
 begin
   if not public.is_teacher() and coalesce(auth.role(), '') <> 'service_role' then
-    new.teacher_feedback := old.teacher_feedback;
-    new.teacher_score := old.teacher_score;
-    new.ai_status := old.ai_status;
-    new.ai_release_at := old.ai_release_at;
+    if tg_op = 'INSERT' then
+      new.teacher_feedback := '';
+      new.teacher_score := '';
+      new.ai_status := 'pending';
+      new.ai_release_at := coalesce(new.submitted_at, now()) + interval '12 hours';
+    else
+      new.teacher_feedback := old.teacher_feedback;
+      new.teacher_score := old.teacher_score;
+      if new.content is distinct from old.content
+         or new.submitted_at is distinct from old.submitted_at
+         or new.target_level is distinct from old.target_level then
+        new.ai_status := 'pending';
+        new.ai_release_at := coalesce(new.submitted_at, now()) + interval '12 hours';
+        update public.writing_ai_reviews
+        set status = 'pending',
+            retry_count = 0,
+            error_message = '',
+            release_at = new.ai_release_at,
+            student_seen_at = null,
+            updated_at = now()
+        where submission_id = new.id;
+      else
+        new.ai_status := old.ai_status;
+        new.ai_release_at := old.ai_release_at;
+      end if;
+    end if;
   end if;
   return new;
 end;
@@ -176,7 +198,7 @@ $$;
 
 drop trigger if exists trg_protect_writing_teacher_fields on public.writing_submissions;
 create trigger trg_protect_writing_teacher_fields
-  before update on public.writing_submissions
+  before insert or update on public.writing_submissions
   for each row execute procedure public.protect_writing_teacher_fields();
 
 -- 4. BẢNG BÀI SỬA CHI TIẾT & HẸN GIỜ TRẢ SAU 12 TIẾNG + THÔNG BÁO
@@ -192,10 +214,14 @@ create table if not exists public.writing_ai_reviews (
   review_json jsonb,
   error_message text not null default '',
   grade_count int not null default 1,
+  retry_count int not null default 0,
   student_seen_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.writing_ai_reviews
+  add column if not exists retry_count int not null default 0;
 
 create index if not exists idx_writing_ai_reviews_user_release
   on public.writing_ai_reviews (user_id, release_at desc);
@@ -276,3 +302,28 @@ grant execute on function public.is_teacher() to anon, authenticated, service_ro
 grant execute on function public.teacher_delete_student(uuid) to authenticated, service_role;
 grant execute on function public.mark_writing_review_seen(text) to authenticated, service_role;
 grant execute on function public.teacher_release_review_now(text) to authenticated, service_role;
+
+-- 6. BẬT HÀNG ĐỢI TỰ ĐỘNG CHẤM LẠI MỖI 5 PHÚT (CHẠY RIÊNG SAU KHI CÀI CRON_SECRET)
+-- Hướng dẫn:
+--   Bước A: Vào Edge Functions -> Secrets -> thêm secret tên CRON_SECRET (ví dụ: vstep-retry-2026-secret)
+--   Bước B: Bỏ dấu "--" ở các dòng dưới, thay ĐÚNG giá trị CRON_SECRET rồi bấm RUN 1 lần duy nhất:
+--
+-- create extension if not exists pg_cron;
+-- create extension if not exists pg_net;
+-- select cron.unschedule('vstep-grade-writing-queue') where exists (
+--   select 1 from cron.job where jobname = 'vstep-grade-writing-queue'
+-- );
+-- select cron.schedule(
+--   'vstep-grade-writing-queue',
+--   '*/5 * * * *',
+--   $$
+--   select net.http_post(
+--     url := 'https://isnwdcqglswkdtgtwiat.supabase.co/functions/v1/grade-writing',
+--     headers := jsonb_build_object(
+--       'Content-Type', 'application/json',
+--       'x-cron-secret', 'THAY_BANG_CRON_SECRET_CUA_BAN'
+--     ),
+--     body := '{"mode":"process_queue","batch_size":3}'::jsonb
+--   );
+--   $$
+-- );
