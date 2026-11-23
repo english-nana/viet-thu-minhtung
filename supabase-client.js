@@ -12,6 +12,7 @@
     { id: "advice-5", taskType: "task1", title: "Task 01 · Đề 5: Chọn hoạt động mùa hè (Harry)" },
     { id: "inquiry-1", taskType: "task1", title: "Task 01 · Hỏi thông tin 1: Vé xem hòa nhạc (Alex)" },
     { id: "inquiry-2", taskType: "task1", title: "Task 01 · Hỏi thông tin 2: Mua thú cưng tại cửa hàng (Pet Shop)" },
+    { id: "inquiry-3", taskType: "task1", title: "Task 01 · Hỏi thông tin 3: Tổ chức tiệc sinh nhật (Sarah)" },
     { id: "children-devices", taskType: "task2", title: "Task 02 · Chủ đề 1: Trẻ em & Thiết bị điện tử" },
     { id: "fast-fashion", taskType: "task2", title: "Task 02 · Chủ đề 2: Thời trang nhanh & Môi trường" },
     { id: "choosing-job", taskType: "task2", title: "Task 02 · Chủ đề 3: Lựa chọn công việc & Sự hài lòng" },

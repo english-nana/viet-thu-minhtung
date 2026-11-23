@@ -502,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const QUICK_SEARCH_CATALOG = [
         { title: 'Lý thuyết chung: Viết Thư & Email', sub: 'Task 01 · Bố cục 3 phần, văn phong Formal/Informal', tag: 'Task 01', view: 'ly-thuyet' },
         { title: 'Thư khuyên / đề xuất (5 đề)', sub: 'Mua hàng online (Jay), Hội thảo (Carol), Du lịch Hà Nội, Chuyển nhà, Mùa hè', tag: 'Task 01', view: 'khuyen-nghi' },
-        { title: 'Thư hỏi thông tin (2 đề)', sub: 'Vé xem hòa nhạc (Alex), hỏi mua thú cưng tại cửa hàng (Local Pet Shop)', tag: 'Task 01', view: 'hoi-thong-tin' },
+        { title: 'Thư hỏi thông tin (3 đề)', sub: 'Vé xem hòa nhạc (Alex), mua thú cưng (Local Pet Shop), tổ chức tiệc sinh nhật (Sarah)', tag: 'Task 01', view: 'hoi-thong-tin' },
         { title: 'Thư cung cấp thông tin (6 đề)', sub: 'Quê hương (John), Hoa (Emily), tiệc chào mừng, chuyến đi, thể thao, tuyển dụng', tag: 'Task 01', view: 'cung-cap-thong-tin' },
         { title: 'Thư phàn nàn (4 đề)', sub: 'Phòng thay đồ, thiết bị nhà bếp hỏng, đơn hàng Shopee, nhà hàng', tag: 'Task 01', view: 'phan-nan' },
         { title: 'Thư cho đánh giá / phản hồi (3 đề)', sub: 'Khách sạn, nhà sách, đánh giá sách cho Mia', tag: 'Task 01', view: 'danh-gia' },
@@ -2193,7 +2193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- 16b. Thư Hỏi Thông Tin (#hoi-thong-tin) — Split-Screen Workspace (2 Đề) ---
+    // --- 16b. Thư Hỏi Thông Tin (#hoi-thong-tin) — Split-Screen Workspace (3 Đề) ---
     const inquiryWorkspace = document.getElementById('inquiry-split-workspace');
     const inquiryResizer = document.getElementById('inquiry-split-resizer');
     const inquiryLevelBtns = document.querySelectorAll('[data-inquiry-level]');
@@ -2466,6 +2466,126 @@ document.addEventListener('DOMContentLoaded', () => {
                 tipTitle: 'Mẹo nâng band điểm từ B1 lên B2',
                 tipText: 'Thêm các từ vựng chuyên biệt đúng chủ đề nuôi thú cưng như <strong>friendly companion</strong>, <strong>vaccinations</strong>, <strong>health record</strong>, <strong>needs exercise</strong> và câu lý do tự nhiên <strong>As this would be my first pet, some advice after purchase would be very helpful</strong> sẽ giúp bài viết thuyết phục và ghi điểm cao ở tiêu chí Vocabulary &amp; Task Fulfillment.'
             }
+        },
+        '3': {
+            numLabel: 'Đề 3',
+            taskTitle: 'Write a letter to Sarah asking for advice on a birthday party',
+            placeholder: 'Dear Sarah,\n\nViết bài của bạn ở đây…',
+            promptEn: 'You want to organize a birthday party but are not sure about the details. Write a letter to your friend to ask for advice. In your letter, you should:',
+            promptVi: 'Bạn muốn tổ chức một bữa tiệc sinh nhật nhưng vẫn chưa chắc chắn về các chi tiết. Hãy viết một bức thư cho người bạn của mình để xin lời khuyên. Trong thư, bạn nên:',
+            bullets: [
+                {
+                    en: 'Ask for suggestions about a suitable time for the party',
+                    vi: 'Xin gợi ý về thời gian phù hợp cho bữa tiệc'
+                },
+                {
+                    en: 'Ask for ideas about the location of the party',
+                    vi: 'Xin ý tưởng về địa điểm tổ chức bữa tiệc'
+                },
+                {
+                    en: 'Ask what kind of gift you should suggest to guests',
+                    vi: 'Hỏi xem bạn nên gợi ý loại quà tặng nào cho khách mời'
+                }
+            ],
+            footerEn: 'Write at least 120 words. You do not need to include your name or addresses. Your response will be evaluated in terms of Task Fulfillment, Organization, Vocabulary and Grammar.',
+            footerVi: 'Viết ít nhất 120 từ. Bạn không cần ghi tên hoặc địa chỉ của mình. Bài viết của bạn sẽ được đánh giá dựa trên các tiêu chí: Mức độ hoàn thành yêu cầu đề bài (Task Fulfillment), Bố cục (Organization), Từ vựng (Vocabulary) và Ngữ pháp (Grammar).',
+            sampleB1: [
+                '<strong>Dear Sarah,</strong>',
+                'How are you doing? I hope you’re doing well. I’m planning to have a birthday party next month, but I haven’t decided on the details yet. Since you are good at organizing parties, I’d love to hear your advice.',
+                'First, could you suggest a suitable time for the party? I’m thinking about Saturday evening, but I’m not sure whether people will be busy. What do you think? I’d also like to ask for some ideas about the location. Should I have the party at my house, in a café, or at a small restaurant?',
+                'Finally, could you tell me what kind of gift I should suggest to my guests? I don’t want them to spend too much money, so maybe something simple would be best.',
+                'Thanks for your help. I hope to hear from you soon.',
+                '<strong>Best wishes,</strong>'
+            ],
+            sampleB2: [
+                '<strong>Dear Sarah,</strong>',
+                'It’s been a long time since we last talked. How have you been? I’m planning a birthday party for a small group of friends next month, but I haven’t made any final decisions yet. You organised a lovely party last year, so I’d really appreciate your advice.',
+                'Could you suggest a suitable time for it? I was thinking of Saturday evening, as most people are free then, but some guests may have work or family plans. Do you think an afternoon would be better?',
+                'I’d also like to know where I should hold it. Would my house be comfortable enough, or would a café or small restaurant be more convenient? Finally, could you let me know what kind of gift I should suggest? I’d rather ask for something simple and useful so nobody feels they have to spend too much.',
+                'Thanks for your help. I hope to hear from you soon.',
+                '<strong>Best wishes,</strong>'
+            ],
+            b1: {
+                titleEn: 'Birthday Party Advice Inquiry — Level B1',
+                titleVi: 'Gợi ý từ vựng, cấu trúc và dàn ý trình độ B1',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Ở trình độ <strong>Level B1</strong>, đây là bức thư thân mật (informal letter) gửi bạn thân để <strong>xin lời khuyên &amp; ý tưởng</strong> cho bữa tiệc sinh nhật. Điểm hay của đề này là bạn vừa đặt câu hỏi, vừa đưa ra <strong>phương án mình đang phân vân</strong> (ví dụ: tối thứ Bảy, tổ chức ở nhà hay quán cà phê, quà đơn giản) để bức thư tự nhiên và đủ độ dài.',
+                stepsHeader: 'Bố cục bức thư xin lời khuyên gửi Sarah (Level B1) gồm 4 phần:',
+                steps: [
+                    '1. <strong>Mở thư:</strong> Chào Sarah, hỏi thăm sức khỏe, chia sẻ dự định tổ chức tiệc sinh nhật tháng tới nhưng chưa chốt chi tiết, khen bạn tổ chức tiệc khéo nên muốn xin lời khuyên.',
+                    '2. <strong>Đoạn 1 (Thời gian &amp; Địa điểm):</strong> Xin gợi ý thời gian phù hợp (đang cân nhắc tối thứ Bảy nhưng sợ mọi người bận) và xin ý tưởng địa điểm (tổ chức ở nhà, quán cà phê hay nhà hàng nhỏ).',
+                    '3. <strong>Đoạn 2 (Gợi ý quà tặng cho khách):</strong> Hỏi nên gợi ý loại quà nào cho khách mời vì không muốn mọi người tốn quá nhiều tiền — có lẽ món gì đó đơn giản là hợp lý nhất.',
+                    '4. <strong>Kết thư:</strong> Cảm ơn sự giúp đỡ của bạn, mong sớm nhận hồi âm và ký tên thân mật (<em>Best wishes,</em>).'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư thân mật hỏi ý kiến / xin lời khuyên (Informal letter asking for advice).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Sarah (bạn thân); giọng văn gần gũi, tự nhiên, được dùng dạng viết tắt (<em>you’re, I’m, haven’t, I’d, don’t</em>).',
+                    '<strong>3 yêu cầu bắt buộc trong đề:</strong><ul><li>Xin gợi ý thời gian phù hợp cho bữa tiệc (<em>suitable time for the party</em>).</li><li>Xin ý tưởng về địa điểm tổ chức (<em>ideas about the location</em>).</li><li>Hỏi nên gợi ý loại quà gì cho khách mời (<em>what kind of gift to suggest to guests</em>).</li></ul>',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc hỏi ý kiến B1:</strong><ul><li>Nêu lý do hỏi bạn: <code>Since you are good at + V-ing..., I’d love to hear your advice.</code></li><li>Xin gợi ý &amp; nêu băn khoăn: <code>First, could you suggest...? I’m thinking about..., but I’m not sure whether...</code></li><li>Hỏi chọn phương án: <code>Should I + V at A, in B, or at C?</code></li><li>Hỏi gián tiếp: <code>Finally, could you tell me what kind of gift I should suggest to...?</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Chào Sarah, hỏi thăm sức khỏe, báo tin dự định tổ chức tiệc sinh nhật tháng tới nhưng chưa chốt chi tiết và muốn xin lời khuyên vì bạn rất khéo tổ chức tiệc.',
+                    '<strong>2. Thân bài 1 — Thời gian &amp; Địa điểm (Ý 1 &amp; 2):</strong> Hỏi thời gian phù hợp (đang nghĩ tối thứ Bảy nhưng lo mọi người bận, hỏi ý bạn); nối tiếp hỏi ý tưởng địa điểm: nên làm ở nhà, quán cà phê hay nhà hàng nhỏ.',
+                    '<strong>3. Thân bài 2 — Quà tặng cho khách (Ý 3):</strong> Hỏi nên gợi ý loại quà nào cho khách vì không muốn họ tốn quá nhiều tiền nên món quà đơn giản có lẽ là tốt nhất.',
+                    '<strong>4. Kết thư &amp; Ký tên:</strong> Cảm ơn Sarah đã giúp đỡ, mong sớm nhận thư trả lời và ký tên (<em>Best wishes,</em>).'
+                ],
+                vocab: [
+                    ['decide on', 'phr. v.', 'quyết định chọn', 'We still need to decide on the menu for the dinner.'],
+                    ['be good at', 'adj. phr.', 'giỏi về việc gì', 'My sister is really good at decorating rooms for events.'],
+                    ['suitable time', 'n. phr.', 'thời gian phù hợp', 'Let’s pick a suitable time when everyone can attend.'],
+                    ['location', 'n.', 'địa điểm', 'The riverside park is a lovely location for a picnic.'],
+                    ['small restaurant', 'n. phr.', 'nhà hàng nhỏ ấm cúng', 'They booked a table at a small restaurant downtown.'],
+                    ['guests', 'n. (pl.)', 'khách mời', 'Around twenty guests came to celebrate her graduation.'],
+                    ['spend too much money', 'v. phr.', 'chi tiêu quá nhiều tiền', 'Students try not to spend too much money on eating out.'],
+                    ['something simple', 'n. phr.', 'một món gì đó đơn giản', 'He prefers something simple like a book or a mug.']
+                ],
+                tipTitle: 'Mẹo viết thư xin lời khuyên Level B1 tự nhiên',
+                tipText: 'Khi xin ý kiến bạn bè, hãy kết hợp công thức <strong>Đặt câu hỏi + Đưa sẵn 2–3 lựa chọn bạn đang phân vân</strong> (ví dụ: <em>Saturday evening? / at my house, in a café, or at a small restaurant?</em>). Cách này giúp bài viết vừa chân thực như thư thật, vừa dễ dàng mở rộng đủ từ.'
+            },
+            b2: {
+                titleEn: 'Birthday Party Advice Inquiry — Level B2',
+                titleVi: 'Gợi ý từ vựng nâng cao, cấu trúc tự nhiên và dàn ý trình độ B2',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Ở trình độ <strong>Level B2</strong>, bài viết nâng cấp mạch diễn đạt bằng các cụm từ tự nhiên và đa dạng hơn: <em>make any final decisions, really appreciate your advice, hold a party, comfortable enough vs. more convenient, I’d rather ask for something simple and useful so nobody feels they have to...</em>',
+                stepsHeader: 'Các điểm nâng cấp giúp bài viết đạt chuẩn Level B2:',
+                steps: [
+                    '1. <strong>Mở thư tự nhiên, giàu ngữ cảnh:</strong> Dùng <em>It’s been a long time... / How have you been?</em>, cụ thể hóa <em>a small group of friends</em>, dùng <em>haven’t made any final decisions yet</em> và nhắc kỷ niệm thực tế <em>You organised a lovely party last year, so I’d really appreciate your advice</em>.',
+                    '2. <strong>Đoạn 1 (Thời gian):</strong> Dùng quá khứ tiếp diễn mang sắc thái cân nhắc lịch sự (<em>I was thinking of Saturday evening, as most people are free then</em>), nêu rõ lý do băn khoăn (<em>work or family plans</em>) và hỏi phương án thay thế (<em>Do you think an afternoon would be better?</em>).',
+                    '3. <strong>Đoạn 2 (Địa điểm &amp; Quà tặng):</strong> Dùng động từ <em>hold it</em> thay cho <em>have the party</em>, so sánh tiêu chí bằng <em>Would ... be comfortable enough, or would ... be more convenient?</em>, và diễn đạt tinh tế với <em>I’d rather ask for something simple and useful so nobody feels they have to spend too much</em>.',
+                    '4. <strong>Kết thư thân mật:</strong> Cảm ơn sự giúp đỡ, hẹn sớm nhận hồi âm và ký tên (<em>Best wishes,</em>).'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư thân mật hỏi ý kiến / xin lời khuyên chi tiết (Informal letter asking for advice).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Sarah (bạn thân); giọng văn tự nhiên, mạch lạc, có cân nhắc các khía cạnh thực tế.',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc ăn điểm Level B2:</strong><ul><li>Quá khứ tiếp diễn nêu dự định chưa chốt: <code>I was thinking of Saturday evening, as most people are free then, but...</code></li><li>Câu hỏi so sánh bằng <em>Would</em>: <code>Would my house be comfortable enough, or would a café or small restaurant be more convenient?</code></li><li>Cấu trúc ưu tiên <em>would rather</em> + mệnh đề mục đích: <code>I’d rather ask for something simple and useful so nobody feels they have to spend too much.</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Hỏi thăm Sarah sau thời gian lâu chưa trò chuyện, báo kế hoạch tổ chức tiệc sinh nhật cho nhóm bạn nhỏ tháng tới nhưng chưa chốt quyết định cuối cùng, nhắc năm ngoái Sarah tổ chức tiệc rất đẹp nên muốn xin lời khuyên.',
+                    '<strong>2. Thân bài 1 — Thời gian tổ chức (Ý 1):</strong> Xin gợi ý thời điểm phù hợp; chia sẻ đang cân nhắc tối thứ Bảy vì đa số rảnh nhưng sợ một vài khách vướng việc công ty hoặc gia đình, hỏi xem buổi chiều có ổn hơn không.',
+                    '<strong>3. Thân bài 2 — Địa điểm &amp; Gợi ý quà (Ý 2 &amp; 3):</strong> Hỏi nên tổ chức ở đâu — ở nhà liệu có đủ thoải mái hay quán cà phê / nhà hàng nhỏ sẽ tiện hơn; cuối cùng hỏi nên gợi ý loại quà gì để mọi người chọn đồ đơn giản, hữu ích mà không áp lực chi tiêu.',
+                    '<strong>4. Kết thư &amp; Ký tên:</strong> Cảm ơn sự hỗ trợ của bạn, mong sớm nhận phản hồi và ký tên (<em>Best wishes,</em>).'
+                ],
+                vocab: [
+                    ['make a final decision', 'v. phr.', 'đưa ra quyết định cuối cùng', 'We will compare both quotes before we make a final decision.'],
+                    ['appreciate someone’s advice', 'v. phr.', 'rất trân trọng lời khuyên của ai', 'New graduates often appreciate their mentor’s advice.'],
+                    ['family plans', 'n. phr.', 'kế hoạch riêng với gia đình', 'Several colleagues have family plans over the long holiday.'],
+                    ['hold an event / party', 'v. phr.', 'tổ chức một sự kiện / bữa tiệc', 'The community center can hold an event for up to fifty people.'],
+                    ['comfortable enough', 'adj. phr.', 'đủ thoải mái', 'Is the meeting room comfortable enough for a three-hour workshop?'],
+                    ['more convenient', 'adj. phr.', 'thuận tiện hơn', 'Taking the metro is often more convenient than driving downtown.'],
+                    ['would rather + V', 'modal phr.', 'thích / muốn làm gì hơn', 'I would rather stay indoors when the weather turns stormy.'],
+                    ['simple and useful', 'adj. phr.', 'đơn giản và hữu ích', 'A notebook is a simple and useful gift for any student.']
+                ],
+                upgrades: [
+                    ['Mở thư', 'haven’t decided on the details yet / good at organizing parties, I’d love to hear your advice', '<strong>haven’t made any final decisions yet</strong> / <strong>You organised a lovely party last year, so I’d really appreciate your advice.</strong>'],
+                    ['Thời gian', 'I’m thinking about Saturday evening... whether people will be busy.', '<strong>I was thinking of Saturday evening, as most people are free then, but some guests may have work or family plans. Do you think an afternoon would be better?</strong>'],
+                    ['Địa điểm', 'Should I have the party at my house, in a café, or at a small restaurant?', '<strong>where I should hold it. Would my house be comfortable enough, or would a café or small restaurant be more convenient?</strong>'],
+                    ['Quà tặng', 'I don’t want them to spend too much money, so maybe something simple would be best.', '<strong>I’d rather ask for something simple and useful so nobody feels they have to spend too much.</strong>']
+                ],
+                tipTitle: 'Mẹo nâng band điểm từ B1 lên B2',
+                tipText: 'Thay vì chỉ hỏi <em>Should I...?</em>, hãy dùng cặp câu hỏi giả định <strong>Would [A] be comfortable enough, or would [B] be more convenient?</strong> kết hợp cấu trúc <strong>I’d rather ask for... so nobody feels they have to...</strong> để câu văn tự nhiên và đạt điểm cao tiêu chí Grammar &amp; Vocabulary.'
+            }
         }
     };
 
@@ -2593,7 +2713,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 16b.5 Word Counter, Prompt Switcher (2 Đề), LocalStorage Draft, Cloud Submit & Sample Comparison
+    // 16b.5 Word Counter, Prompt Switcher (3 Đề), LocalStorage Draft, Cloud Submit & Sample Comparison
     function getInquiryMinWords() {
         return parseInt((inquiryTextarea && inquiryTextarea.getAttribute('data-min-words')) || '120', 10);
     }
