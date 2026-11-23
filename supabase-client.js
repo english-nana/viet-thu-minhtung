@@ -117,6 +117,247 @@
     `;
   }
 
+  function formatRemainingTime(isoReleaseAt) {
+    if (!isoReleaseAt) return "";
+    const targetMs = new Date(isoReleaseAt).getTime();
+    if (isNaN(targetMs)) return "";
+    const diffMs = targetMs - Date.now();
+    if (diffMs <= 0) return "";
+    const totalMins = Math.ceil(diffMs / 60000);
+    const hours = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    if (hours > 0 && mins > 0) return `${hours} giờ ${mins} phút`;
+    if (hours > 0) return `${hours} giờ`;
+    return `${Math.max(1, mins)} phút`;
+  }
+
+  async function invokeGradeWriting(submissionId, options) {
+    const client = getClient();
+    if (!client || !submissionId) {
+      return { ok: false, error: "Chưa kết nối Supabase." };
+    }
+    const opts = options || {};
+    try {
+      const { data, error } = await client.functions.invoke("grade-writing", {
+        body: {
+          submission_id: submissionId,
+          force_teacher: Boolean(opts.forceTeacher),
+          release_now: Boolean(opts.releaseNow)
+        }
+      });
+      if (error) {
+        return { ok: false, error: error.message || "Chưa triển khai Edge Function grade-writing." };
+      }
+      if (!data || data.ok === false) {
+        return { ok: false, error: (data && data.error) || "Không thể chấm bài tự động lúc này." };
+      }
+      return data;
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : "Lỗi kết nối hệ thống chấm bài." };
+    }
+  }
+
+  function getCategoryBadgeClass(cat) {
+    const lower = String(cat || "").toLowerCase();
+    if (lower.includes("chính tả") || lower.includes("spell")) return "cat-spelling";
+    if (lower.includes("dấu câu") || lower.includes("punct")) return "cat-punct";
+    if (lower.includes("từ vựng") || lower.includes("văn phong") || lower.includes("vocab")) return "cat-vocab";
+    return "cat-grammar";
+  }
+
+  function buildInlineHighlightedEssay(originalText, corrections) {
+    const text = String(originalText || "");
+    const list = Array.isArray(corrections) ? corrections : [];
+    if (!text) return "";
+    if (list.length === 0) return escapeHtml(text);
+
+    const lowerText = text.toLowerCase();
+    const occupied = [];
+    const matches = [];
+
+    const overlaps = (start, end) =>
+      occupied.some(r => start < r.end && end > r.start);
+
+    list.forEach((c, idx) => {
+      const needle = String(c.original || "").trim();
+      if (!needle) return;
+      const num = c.id || idx + 1;
+      let startIdx = -1;
+      let searchFrom = 0;
+
+      while (searchFrom < text.length) {
+        let pos = text.indexOf(needle, searchFrom);
+        if (pos === -1) {
+          pos = lowerText.indexOf(needle.toLowerCase(), searchFrom);
+        }
+        if (pos === -1) break;
+        const endPos = pos + needle.length;
+        if (!overlaps(pos, endPos)) {
+          startIdx = pos;
+          occupied.push({ start: pos, end: endPos });
+          matches.push({
+            start: pos,
+            end: endPos,
+            num,
+            original: text.slice(pos, endPos),
+            corrected: String(c.corrected || ""),
+            explanation: String(c.explanation_vi || "")
+          });
+          break;
+        }
+        searchFrom = pos + 1;
+      }
+    });
+
+    if (matches.length === 0) return escapeHtml(text);
+    matches.sort((a, b) => a.start - b.start);
+
+    let out = "";
+    let cursor = 0;
+    matches.forEach(m => {
+      if (m.start > cursor) {
+        out += escapeHtml(text.slice(cursor, m.start));
+      }
+      out += `<span class="ai-inline-fix" title="${escapeHtml(`#${m.num}: ${m.explanation}`)}"><del class="ai-del">${escapeHtml(m.original)}</del><ins class="ai-ins">${escapeHtml(m.corrected)}</ins><sup class="ai-sup">[${m.num}]</sup></span>`;
+      cursor = m.end;
+    });
+    if (cursor < text.length) {
+      out += escapeHtml(text.slice(cursor));
+    }
+    return out;
+  }
+
+  function renderWritingReviewHtml(originalContent, reviewJson, meta) {
+    if (!reviewJson || typeof reviewJson !== "object") return "";
+    const info = meta || {};
+    const targetLevel = info.targetLevel || "B1";
+    const corrections = Array.isArray(reviewJson.corrections) ? reviewJson.corrections : [];
+    const ideaAdditions = Array.isArray(reviewJson.idea_additions) ? reviewJson.idea_additions : [];
+    const criteria = reviewJson.criteria || {};
+    const revisedVersion = String(reviewJson.revised_version || "").trim();
+
+    const criteriaItems = [
+      { key: "task_fulfillment", label: "Hoàn thành yêu cầu đề" },
+      { key: "organization", label: "Bố cục & Liên kết" },
+      { key: "vocabulary", label: "Từ vựng & Văn phong" },
+      { key: "grammar", label: "Ngữ pháp & Chính xác" }
+    ].filter(item => criteria[item.key]);
+
+    return `
+      <div class="ai-review-panel">
+        <div class="ai-review-summary">
+          <div class="ai-review-badges">
+            <span class="ai-level-badge">Mục tiêu Level ${escapeHtml(targetLevel)}</span>
+            ${reviewJson.estimated_band ? `<span class="ai-band-badge">${escapeHtml(reviewJson.estimated_band)}</span>` : ""}
+            ${reviewJson.level_assessment ? `<span class="ai-assess-text">${escapeHtml(reviewJson.level_assessment)}</span>` : ""}
+          </div>
+          ${reviewJson.overall_comment ? `<p class="ai-overall-comment">${escapeHtml(reviewJson.overall_comment)}</p>` : ""}
+
+          ${
+            criteriaItems.length > 0
+              ? `
+              <div class="ai-criteria-grid">
+                ${criteriaItems
+                  .map(
+                    item => `
+                    <div class="ai-criteria-item">
+                      <div class="ai-criteria-label">${escapeHtml(item.label)}</div>
+                      <div class="ai-criteria-text">${escapeHtml(criteria[item.key])}</div>
+                    </div>
+                  `
+                  )
+                  .join("")}
+              </div>
+            `
+              : ""
+          }
+        </div>
+
+        <div class="ai-review-block">
+          <div class="ai-block-title">1. Bài viết đã đánh dấu lỗi trực tiếp</div>
+          <div class="ai-inline-essay">${buildInlineHighlightedEssay(originalContent, corrections)}</div>
+        </div>
+
+        <div class="ai-review-block">
+          <div class="ai-block-title">2. Chi tiết các lỗi cần sửa (${corrections.length} mục)</div>
+          ${
+            corrections.length === 0
+              ? `<p class="ai-clean-note">✓ Bài viết không có lỗi ngữ pháp, chính tả, dấu câu hay dùng từ đáng kể ở mức Level ${escapeHtml(targetLevel)}.</p>`
+              : `
+              <div class="ai-corr-table-wrap">
+                <table class="ai-corr-table">
+                  <thead>
+                    <tr>
+                      <th style="width:36px;">#</th>
+                      <th style="width:34%;">Chỗ sai → Sửa thành</th>
+                      <th style="width:110px;">Loại lỗi</th>
+                      <th>Giải thích tại sao sai</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${corrections
+                      .map((c, idx) => {
+                        const num = c.id || idx + 1;
+                        return `
+                          <tr>
+                            <td class="ai-col-num">${num}</td>
+                            <td class="ai-col-diff">
+                              <div class="ai-diff-orig">${escapeHtml(c.original)}</div>
+                              <div class="ai-diff-fix">→ ${escapeHtml(c.corrected)}</div>
+                            </td>
+                            <td>
+                              <span class="ai-cat-pill ${getCategoryBadgeClass(c.category)}">${escapeHtml(c.category || "Ngữ pháp")}</span>
+                            </td>
+                            <td class="ai-col-why">${escapeHtml(c.explanation_vi || "")}</td>
+                          </tr>
+                        `;
+                      })
+                      .join("")}
+                  </tbody>
+                </table>
+              </div>
+            `
+          }
+        </div>
+
+        ${
+          ideaAdditions.length > 0
+            ? `
+            <div class="ai-review-block">
+              <div class="ai-block-title">3. Gợi ý bổ sung ý cho đầy đủ hơn (chuẩn Level ${escapeHtml(targetLevel)})</div>
+              <div class="ai-ideas-list">
+                ${ideaAdditions
+                  .map(
+                    it => `
+                    <div class="ai-idea-card">
+                      ${it.where_vi ? `<div class="ai-idea-where">${escapeHtml(it.where_vi)}</div>` : ""}
+                      ${it.issue_vi ? `<p class="ai-idea-issue">${escapeHtml(it.issue_vi)}</p>` : ""}
+                      ${it.suggested_sentences_en ? `<div class="ai-idea-en">“${escapeHtml(it.suggested_sentences_en)}”</div>` : ""}
+                      ${it.meaning_vi ? `<div class="ai-idea-vi">${escapeHtml(it.meaning_vi)}</div>` : ""}
+                    </div>
+                  `
+                  )
+                  .join("")}
+              </div>
+            </div>
+          `
+            : ""
+        }
+
+        ${
+          revisedVersion
+            ? `
+            <details class="ai-revised-details">
+              <summary class="ai-revised-summary">Xem bài viết hoàn chỉnh sau khi sửa (giữ nguyên ý của bạn)</summary>
+              <div class="ai-revised-body">${escapeHtml(revisedVersion)}</div>
+            </details>
+          `
+            : ""
+        }
+      </div>
+    `;
+  }
+
   window.WritingCloud = {
     CLASS_LIST,
     LESSONS_CATALOG,
@@ -125,9 +366,12 @@
     signInWithGoogle,
     escapeHtml,
     formatDateTime,
+    formatRemainingTime,
     parseFullNameAndClass,
     formatStoredFullName,
     getInitials,
-    renderGoogleIconSvg
+    renderGoogleIconSvg,
+    invokeGradeWriting,
+    renderWritingReviewHtml
   };
 })();

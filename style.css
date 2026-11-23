@@ -5059,6 +5059,14 @@ mark.idea-hl {
 }
 
 /* Teacher Feedback Display Box on Student Writing Screen */
+#advice-teacher-feedback-box,
+#essay-teacher-feedback-box {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin-top: 10px;
+}
+
 .writing-teacher-feedback-box {
     margin-top: 10px;
     border: 1.5px solid #16A34A;
@@ -5373,4 +5381,562 @@ mark.idea-hl {
 .btn-danger-outline:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* ==========================================================================
+   NOTIFICATION BELL & DROPDOWN (12-HOUR REVIEW ALERTS)
+   ========================================================================== */
+
+.notif-menu-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.notif-bell-btn {
+    position: relative;
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    border: 1.5px solid #D4D4D8;
+    background: #FFFFFF;
+    color: #27272A;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.notif-bell-btn:hover,
+.notif-bell-btn.has-unread {
+    border-color: #18181B;
+    background: #FFFBEB;
+    color: #18181B;
+}
+
+.notif-unread-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #DC2626;
+    border: 1.5px solid #FFFFFF;
+    color: #FFFFFF;
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.notif-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 340px;
+    max-width: calc(100vw - 24px);
+    background: #FFFFFF;
+    border: 2px solid #18181B;
+    box-shadow: 4px 4px 0px #18181B;
+    z-index: 500;
+    overflow: hidden;
+}
+
+.notif-dropdown-header {
+    padding: 11px 14px;
+    background: #FAFAFA;
+    border-bottom: 1.5px solid #E4E4E7;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 800;
+    color: #18181B;
+}
+
+.notif-header-sub {
+    font-size: 11px;
+    font-weight: 600;
+    color: #71717A;
+}
+
+.notif-dropdown-list {
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.notif-empty-state {
+    padding: 20px 16px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 400;
+    color: #71717A;
+    line-height: 1.5;
+}
+
+.notif-item-btn {
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-bottom: 1px solid #F4F4F5;
+    background: #FFFFFF;
+    padding: 12px 14px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: inherit;
+    transition: background-color 0.12s ease;
+}
+
+.notif-item-btn:last-child {
+    border-bottom: none;
+}
+
+.notif-item-btn:hover {
+    background: #FAFAFA;
+}
+
+.notif-item-btn.unread {
+    background: #FEFCE8;
+}
+
+.notif-item-btn.unread:hover {
+    background: #FEF9C3;
+}
+
+.notif-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.notif-item-tag {
+    font-size: 11px;
+    font-weight: 700;
+    color: #166534;
+    background: #DCFCE7;
+    padding: 2px 7px;
+    border-radius: 4px;
+}
+
+.notif-item-tag.new-dot {
+    background: #FFE55C;
+    color: #18181B;
+    border: 1px solid #18181B;
+}
+
+.notif-item-time {
+    font-size: 11px;
+    color: #71717A;
+    font-weight: 400;
+}
+
+.notif-item-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #18181B;
+    line-height: 1.4;
+}
+
+.notif-item-sub {
+    font-size: 12px;
+    font-weight: 400;
+    color: #52525B;
+}
+
+/* ==========================================================================
+   AI VSTEP WRITING REVIEW PANEL (INLINE DIFF + TABLE + IDEA ADDITIONS)
+   ========================================================================== */
+
+.writing-schedule-box {
+    margin-top: 10px;
+    border: 1.5px solid #D97706;
+    border-radius: 8px;
+    background: #FFFBEB;
+    padding: 12px 15px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: #78350F;
+}
+
+.writing-schedule-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.writing-schedule-title {
+    font-weight: 700;
+    color: #92400E;
+    font-size: 13px;
+}
+
+.writing-schedule-pill {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #92400E;
+    background: #FEF3C7;
+    border: 1px solid #F59E0B;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.writing-schedule-desc {
+    margin: 0;
+    font-weight: 400;
+    color: #78350F;
+}
+
+.ai-review-panel {
+    margin-top: 12px;
+    border: 1.5px solid #E4E4E7;
+    border-radius: 8px;
+    background: #FFFFFF;
+    overflow: hidden;
+    color: #27272A;
+}
+
+.ai-review-summary {
+    padding: 14px 16px;
+    background: #FAFAFA;
+    border-bottom: 1px solid #E4E4E7;
+}
+
+.ai-review-badges {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.ai-level-badge {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 11.5px;
+    font-weight: 700;
+    background: #18181B;
+    color: #FFFFFF;
+    padding: 3px 9px;
+    border-radius: 4px;
+}
+
+.ai-band-badge {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 11.5px;
+    font-weight: 700;
+    background: #DCFCE7;
+    color: #166534;
+    border: 1px solid #86EFAC;
+    padding: 2px 9px;
+    border-radius: 4px;
+}
+
+.ai-assess-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: #18181B;
+}
+
+.ai-overall-comment {
+    margin: 0 0 12px;
+    font-size: 13.8px;
+    font-weight: 400;
+    line-height: 1.65;
+    color: #27272A;
+}
+
+.ai-criteria-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+@media (max-width: 640px) {
+    .ai-criteria-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ai-criteria-item {
+    background: #FFFFFF;
+    border: 1px solid #E4E4E7;
+    border-radius: 6px;
+    padding: 8px 11px;
+}
+
+.ai-criteria-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #52525B;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.ai-criteria-text {
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #27272A;
+}
+
+.ai-review-block {
+    padding: 14px 16px;
+    border-bottom: 1px solid #F4F4F5;
+}
+
+.ai-block-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #18181B;
+    margin-bottom: 10px;
+}
+
+.ai-inline-essay {
+    border: 1px solid #E4E4E7;
+    border-radius: 6px;
+    background: #FFFFFF;
+    padding: 13px 15px;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.85;
+    color: #27272A;
+    white-space: pre-wrap;
+    text-align: justify;
+}
+
+.ai-inline-fix {
+    display: inline;
+    background: #FEF9C3;
+    padding: 1px 4px;
+    border-radius: 4px;
+}
+
+.ai-del {
+    color: #B91C1C;
+    text-decoration: line-through;
+    margin-right: 4px;
+}
+
+.ai-ins {
+    color: #15803D;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.ai-sup {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: #52525B;
+    margin-left: 2px;
+}
+
+.ai-clean-note {
+    margin: 0;
+    padding: 10px 12px;
+    background: #F0FDF4;
+    border: 1px solid #BBF7D0;
+    border-radius: 6px;
+    color: #166534;
+    font-size: 13.5px;
+    font-weight: 400;
+}
+
+.ai-corr-table-wrap {
+    overflow-x: auto;
+    border: 1px solid #E4E4E7;
+    border-radius: 6px;
+}
+
+.ai-corr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.2px;
+    background: #FFFFFF;
+}
+
+.ai-corr-table th {
+    background: #FAFAFA;
+    text-align: left;
+    padding: 9px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #52525B;
+    border-bottom: 1px solid #E4E4E7;
+}
+
+.ai-corr-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #F4F4F5;
+    vertical-align: top;
+    font-weight: 400;
+    line-height: 1.55;
+    color: #27272A;
+}
+
+.ai-corr-table tr:last-child td {
+    border-bottom: none;
+}
+
+.ai-col-num {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    color: #71717A;
+}
+
+.ai-diff-orig {
+    color: #B91C1C;
+    text-decoration: line-through;
+    margin-bottom: 2px;
+}
+
+.ai-diff-fix {
+    color: #15803D;
+    font-weight: 500;
+}
+
+.ai-cat-pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.ai-cat-pill.cat-grammar {
+    background: #FEE2E2;
+    color: #991B1B;
+}
+
+.ai-cat-pill.cat-spelling {
+    background: #FFEDD5;
+    color: #9A3412;
+}
+
+.ai-cat-pill.cat-punct {
+    background: #F4F4F5;
+    color: #3F3F46;
+}
+
+.ai-cat-pill.cat-vocab {
+    background: #EEF2FF;
+    color: #3730A3;
+}
+
+.ai-ideas-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ai-idea-card {
+    border: 1px solid #FDE68A;
+    background: #FFFBEB;
+    border-radius: 6px;
+    padding: 11px 13px;
+}
+
+.ai-idea-where {
+    font-size: 12px;
+    font-weight: 700;
+    color: #92400E;
+    margin-bottom: 4px;
+}
+
+.ai-idea-issue {
+    margin: 0 0 6px;
+    font-size: 13.2px;
+    font-weight: 400;
+    color: #3F3F46;
+    line-height: 1.55;
+}
+
+.ai-idea-en {
+    font-size: 13.5px;
+    font-weight: 400;
+    color: #18181B;
+    background: #FFFFFF;
+    border-left: 3px solid #D97706;
+    padding: 7px 10px;
+    border-radius: 4px;
+    line-height: 1.6;
+    margin-bottom: 5px;
+}
+
+.ai-idea-vi {
+    font-size: 12.5px;
+    font-weight: 400;
+    color: #52525B;
+    line-height: 1.5;
+}
+
+.ai-revised-details {
+    padding: 12px 16px;
+    background: #FAFAFA;
+}
+
+.ai-revised-summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    color: #18181B;
+    user-select: none;
+}
+
+.ai-revised-body {
+    margin-top: 10px;
+    padding: 13px 15px;
+    background: #FFFFFF;
+    border: 1px solid #E4E4E7;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.75;
+    color: #27272A;
+    white-space: pre-wrap;
+    text-align: justify;
+}
+
+.teacher-ai-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 9px 12px;
+    background: #FAFAFA;
+    border: 1px solid #E4E4E7;
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.teacher-ai-details {
+    margin-bottom: 12px;
+}
+
+.teacher-ai-details > summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    color: #18181B;
+    padding: 8px 12px;
+    background: #F4F4F5;
+    border: 1px solid #E4E4E7;
+    border-radius: 6px;
+    user-select: none;
 }

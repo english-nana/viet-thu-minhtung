@@ -3,14 +3,16 @@
 -- ============================================================================
 -- An toàn khi chạy trên cùng dự án Supabase với Speaking Part 1:
 -- - Giữ nguyên toàn bộ bảng teachers, profiles, speaking_attempts hiện có
--- - Bổ sung bảng public.writing_submissions cho bài viết Task 01 & Task 02
--- - Bảo vệ bằng Row Level Security (RLS) & trigger chống học viên tự sửa điểm
+-- - Bổ sung bảng public.writing_submissions & public.writing_ai_reviews
+-- - Bảo mật 12 tiếng ở tầng Database (RLS): học viên chỉ đọc được bài sửa
+--   khi release_at <= now(), còn Giáo viên xem được ngay lập tức
 --
 -- Cách chạy:
 -- 1. Mở Supabase Dashboard -> SQL Editor -> New query
--- 2. Dán toàn bộ file này và bấm nút RUN (Ctrl/Cmd + Enter)
+-- 2. Dán toàn bộ file này và bấm nút RUN (nếu hiện cảnh báo drop/delete, bấm Run query)
 -- 3. Vào Authentication -> URL Configuration -> Redirect URLs và thêm:
 --    https://english-nana.github.io/viet-thu-minhtung/**
+--    https://english-nana.github.io/viet-thu-minhtung/teacher.html
 -- ============================================================================
 
 -- 1. ĐẢM BẢO BẢNG GIÁO VIÊN & HÀM is_teacher() TỒN TẠI
@@ -115,10 +117,18 @@ create table if not exists public.writing_submissions (
   submitted_at timestamptz not null default now(),
   teacher_feedback text not null default '',
   teacher_score text not null default '',
+  ai_status text not null default '',
+  ai_release_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id, lesson_id)
 );
+
+alter table public.writing_submissions
+  add column if not exists ai_status text not null default '';
+
+alter table public.writing_submissions
+  add column if not exists ai_release_at timestamptz;
 
 create index if not exists idx_writing_submissions_user on public.writing_submissions (user_id, lesson_id);
 create index if not exists idx_writing_submissions_submitted on public.writing_submissions (is_submitted, submitted_at desc);
@@ -146,7 +156,7 @@ create policy "Writing: student delete own or teacher delete"
   on public.writing_submissions for delete
   using (auth.uid() = user_id or public.is_teacher());
 
--- Bảo vệ cột điểm & nhận xét giáo viên: học viên không thể tự sửa điểm/nhận xét
+-- Bảo vệ cột điểm, nhận xét giáo viên và lịch trả bài sửa (chỉ teacher/service_role mới đổi được)
 create or replace function public.protect_writing_teacher_fields()
 returns trigger
 language plpgsql
@@ -154,9 +164,11 @@ security definer
 set search_path = public
 as $$
 begin
-  if not public.is_teacher() then
+  if not public.is_teacher() and coalesce(auth.role(), '') <> 'service_role' then
     new.teacher_feedback := old.teacher_feedback;
     new.teacher_score := old.teacher_score;
+    new.ai_status := old.ai_status;
+    new.ai_release_at := old.ai_release_at;
   end if;
   return new;
 end;
@@ -167,10 +179,99 @@ create trigger trg_protect_writing_teacher_fields
   before update on public.writing_submissions
   for each row execute procedure public.protect_writing_teacher_fields();
 
--- 4. CẤP QUYỀN TRUY CẬP SCHEMA & BẢNG CHO TÀI KHOẢN ĐÃ ĐĂNG NHẬP
+-- 4. BẢNG BÀI SỬA CHI TIẾT & HẸN GIỜ TRẢ SAU 12 TIẾNG + THÔNG BÁO
+create table if not exists public.writing_ai_reviews (
+  submission_id text primary key references public.writing_submissions(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  task_type text not null default 'task2',
+  lesson_id text not null,
+  lesson_title text not null default '',
+  target_level text not null default 'B1',
+  status text not null default 'pending',
+  release_at timestamptz not null default (now() + interval '12 hours'),
+  review_json jsonb,
+  error_message text not null default '',
+  grade_count int not null default 1,
+  student_seen_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_writing_ai_reviews_user_release
+  on public.writing_ai_reviews (user_id, release_at desc);
+
+alter table public.writing_ai_reviews enable row level security;
+
+-- Học viên CHỈ được đọc bài sửa khi đã tới hạn 12 tiếng (release_at <= now()); Giáo viên đọc được ngay
+drop policy if exists "AI Reviews: teacher read all or student read after release" on public.writing_ai_reviews;
+create policy "AI Reviews: teacher read all or student read after release"
+  on public.writing_ai_reviews for select
+  using (
+    public.is_teacher()
+    or (
+      auth.uid() = user_id
+      and status = 'ready'
+      and release_at <= now()
+    )
+  );
+
+drop policy if exists "AI Reviews: teacher manage all" on public.writing_ai_reviews;
+create policy "AI Reviews: teacher manage all"
+  on public.writing_ai_reviews for all
+  using (public.is_teacher())
+  with check (public.is_teacher());
+
+-- Học viên đánh dấu đã xem thông báo bài sửa (chỉ áp dụng cho bài đã tới giờ trả)
+create or replace function public.mark_writing_review_seen(p_submission_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.writing_ai_reviews
+  set student_seen_at = coalesce(student_seen_at, now())
+  where submission_id = p_submission_id
+    and user_id = auth.uid()
+    and status = 'ready'
+    and release_at <= now();
+end;
+$$;
+
+-- Giáo viên có thể bấm trả bài sửa sớm hơn 12 tiếng bất cứ lúc nào
+create or replace function public.teacher_release_review_now(p_submission_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  now_ts timestamptz := now();
+begin
+  if not public.is_teacher() then
+    raise exception 'Permission denied: only teachers can release reviews early';
+  end if;
+
+  update public.writing_ai_reviews
+  set release_at = now_ts,
+      updated_at = now_ts
+  where submission_id = p_submission_id;
+
+  update public.writing_submissions
+  set ai_release_at = now_ts,
+      ai_status = 'ready',
+      updated_at = now_ts
+  where id = p_submission_id;
+end;
+$$;
+
+-- 5. CẤP QUYỀN TRUY CẬP SCHEMA & BẢNG CHO TÀI KHOẢN ĐÃ ĐĂNG NHẬP
 grant usage on schema public to anon, authenticated;
 grant select on table public.teachers to authenticated;
 grant select, insert, update, delete on table public.profiles to authenticated;
 grant select, insert, update, delete on table public.writing_submissions to authenticated;
+grant select, insert, update, delete on table public.writing_ai_reviews to authenticated;
 grant execute on function public.is_teacher() to anon, authenticated;
 grant execute on function public.teacher_delete_student(uuid) to authenticated;
+grant execute on function public.mark_writing_review_seen(text) to authenticated;
+grant execute on function public.teacher_release_review_now(text) to authenticated;

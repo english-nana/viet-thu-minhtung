@@ -73,6 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
         profileSaving: false,
         regSelectedClass: CLOUD && CLOUD.CLASS_LIST ? CLOUD.CLASS_LIST[0] : 'ONB204',
         submissionsByLessonId: {},
+        reviewsByLessonId: {},
+        notifOpen: false,
+        notifPollTimer: null,
         isSubmittingAdvice: false,
         isSubmittingEssay: false
     };
@@ -85,12 +88,34 @@ document.addEventListener('DOMContentLoaded', () => {
         return (authState.submissionsByLessonId && authState.submissionsByLessonId[lessonId]) || null;
     }
 
+    function getReleasedReview(lessonId) {
+        const rev = (authState.reviewsByLessonId && authState.reviewsByLessonId[lessonId]) || null;
+        if (!rev || rev.status !== 'ready' || !rev.review_json) return null;
+        const relMs = new Date(rev.release_at || 0).getTime();
+        if (!isNaN(relMs) && relMs > Date.now() && !authState.isTeacher) return null;
+        return rev;
+    }
+
     function getCatalogLessonTitle(lessonId, fallbackTitle) {
         if (CLOUD && Array.isArray(CLOUD.LESSONS_CATALOG)) {
             const found = CLOUD.LESSONS_CATALOG.find(item => item.id === lessonId);
             if (found && found.title) return found.title;
         }
         return fallbackTitle || lessonId;
+    }
+
+    async function markReviewAsSeen(lessonId) {
+        const rev = getReleasedReview(lessonId);
+        if (!rev || rev.student_seen_at || !CLOUD) return;
+        const client = CLOUD.getClient();
+        if (!client) return;
+        rev.student_seen_at = new Date().toISOString();
+        if (typeof renderNotificationBell === 'function') {
+            renderNotificationBell();
+        }
+        try {
+            await client.rpc('mark_writing_review_seen', { p_submission_id: rev.submission_id });
+        } catch (e) {}
     }
 
     function renderTeacherFeedbackBox(boxEl, sub) {
@@ -104,24 +129,67 @@ document.addEventListener('DOMContentLoaded', () => {
         const fmtTime = CLOUD ? CLOUD.formatDateTime : (s => String(s || ''));
         const submittedTime = fmtTime(sub.submitted_at || sub.updated_at || sub.created_at);
         const hasGrade = Boolean((sub.teacher_score && sub.teacher_score.trim()) || (sub.teacher_feedback && sub.teacher_feedback.trim()));
+        const releasedReview = getReleasedReview(sub.lesson_id);
+
+        const blocks = [];
 
         if (hasGrade) {
-            boxEl.innerHTML = `
-                <div class="writing-tf-head">
-                    <span class="writing-tf-title">👨‍🏫 Nhận xét từ Giáo viên${submittedTime ? ` · Đã nộp ${esc(submittedTime)}` : ''}</span>
-                    ${sub.teacher_score ? `<span class="writing-tf-score">Điểm: ${esc(sub.teacher_score)}</span>` : ''}
+            blocks.push(`
+                <div class="writing-teacher-feedback-box">
+                    <div class="writing-tf-head">
+                        <span class="writing-tf-title">👨‍🏫 Nhận xét từ Giáo viên${submittedTime ? ` · Đã nộp ${esc(submittedTime)}` : ''}</span>
+                        ${sub.teacher_score ? `<span class="writing-tf-score">Điểm: ${esc(sub.teacher_score)}</span>` : ''}
+                    </div>
+                    ${sub.teacher_feedback ? `<p class="writing-tf-comment">${esc(sub.teacher_feedback)}</p>` : ''}
                 </div>
-                ${sub.teacher_feedback ? `<p class="writing-tf-comment">${esc(sub.teacher_feedback)}</p>` : ''}
-            `;
-        } else {
-            boxEl.innerHTML = `
-                <div class="writing-tf-head">
-                    <span class="writing-tf-title">✓ Đã gửi bài viết cho Giáo viên${submittedTime ? ` lúc ${esc(submittedTime)}` : ''}</span>
-                    <span class="writing-tf-score">${esc(String(sub.word_count || 0))} từ · Level ${esc(sub.target_level || 'B1')}</span>
-                </div>
-                <p class="writing-tf-comment">Bài viết đã được lưu trên hệ thống. Điểm số và nhận xét của Giáo viên sẽ tự động hiển thị tại đây sau khi chấm bài.</p>
-            `;
+            `);
         }
+
+        if (releasedReview && CLOUD && typeof CLOUD.renderWritingReviewHtml === 'function') {
+            const relTime = fmtTime(releasedReview.release_at);
+            blocks.push(`
+                <div class="writing-teacher-feedback-box">
+                    <div class="writing-tf-head">
+                        <span class="writing-tf-title">✅ Bài sửa chi tiết đã sẵn sàng${relTime ? ` · Trả lúc ${esc(relTime)}` : ''}</span>
+                        <span class="writing-tf-score">${esc(String(sub.word_count || 0))} từ · Level ${esc(releasedReview.target_level || sub.target_level || 'B1')}</span>
+                    </div>
+                </div>
+                ${CLOUD.renderWritingReviewHtml(sub.content || '', releasedReview.review_json, {
+                    targetLevel: releasedReview.target_level || sub.target_level || 'B1'
+                })}
+            `);
+            markReviewAsSeen(sub.lesson_id);
+        } else {
+            const releaseAt = sub.ai_release_at || (sub.submitted_at ? new Date(new Date(sub.submitted_at).getTime() + 12 * 60 * 60 * 1000).toISOString() : '');
+            const remainText = CLOUD && releaseAt ? CLOUD.formatRemainingTime(releaseAt) : '';
+            const releaseFormatted = releaseAt ? fmtTime(releaseAt) : '';
+
+            if (remainText) {
+                blocks.push(`
+                    <div class="writing-schedule-box">
+                        <div class="writing-schedule-head">
+                            <span class="writing-schedule-title">⏳ Đã nộp bài thành công${submittedTime ? ` lúc ${esc(submittedTime)}` : ''} · Đang chờ trả bài sửa</span>
+                            <span class="writing-schedule-pill">Còn ${esc(remainText)}</span>
+                        </div>
+                        <p class="writing-schedule-desc">
+                            Bài sửa chi tiết (ngữ pháp, chính tả, dấu câu, từ vựng &amp; bổ sung ý theo chuẩn <strong>Level ${esc(sub.target_level || 'B1')}</strong>) sẽ được gửi vào tài khoản của bạn sau 12 tiếng — dự kiến lúc <strong>${esc(releaseFormatted)}</strong>. Bạn sẽ nhận được thông báo ở biểu tượng chuông 🔔 trên góc phải khi có bài sửa.
+                        </p>
+                    </div>
+                `);
+            } else if (!hasGrade) {
+                blocks.push(`
+                    <div class="writing-teacher-feedback-box">
+                        <div class="writing-tf-head">
+                            <span class="writing-tf-title">✓ Đã gửi bài viết thành công${submittedTime ? ` lúc ${esc(submittedTime)}` : ''}</span>
+                            <span class="writing-tf-score">${esc(String(sub.word_count || 0))} từ · Level ${esc(sub.target_level || 'B1')}</span>
+                        </div>
+                        <p class="writing-tf-comment">Bài viết đã được lưu trên hệ thống. Khi có bài sửa chi tiết hoặc nhận xét từ Giáo viên, thông báo sẽ hiện ở biểu tượng chuông 🔔 và hiển thị ngay tại đây.</p>
+                    </div>
+                `);
+            }
+        }
+
+        boxEl.innerHTML = blocks.join('');
         boxEl.style.display = 'block';
     }
 
@@ -130,7 +198,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!client || !currentAccount) {
             return { ok: false, error: 'Bạn cần đăng nhập tài khoản trước khi nộp bài cho Giáo viên.' };
         }
-        const nowIso = new Date().toISOString();
+        const nowMs = Date.now();
+        const nowIso = new Date(nowMs).toISOString();
+        const defaultReleaseIso = new Date(nowMs + 12 * 60 * 60 * 1000).toISOString();
         const rowId = `${currentAccount.id}__${lessonId}`;
         const existing = getCloudSubmission(lessonId);
 
@@ -166,12 +236,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 .eq('id', currentAccount.id);
         } catch (e) {}
 
-        const savedRow = data || {
-            ...payload,
-            teacher_score: existing ? existing.teacher_score : '',
-            teacher_feedback: existing ? existing.teacher_feedback : ''
+        // Xóa cache bài sửa cũ (nếu học viên nộp lại bản mới) để chờ đợt trả bài mới sau 12 tiếng
+        delete authState.reviewsByLessonId[lessonId];
+
+        const savedRow = {
+            ...(data || payload),
+            teacher_score: (data && data.teacher_score) || (existing ? existing.teacher_score : ''),
+            teacher_feedback: (data && data.teacher_feedback) || (existing ? existing.teacher_feedback : ''),
+            ai_status: 'scheduled',
+            ai_release_at: defaultReleaseIso
         };
         authState.submissionsByLessonId[lessonId] = savedRow;
+
+        // Kích hoạt Edge Function chấm & hẹn trả bài sửa sau 12 tiếng ở nền
+        if (CLOUD && typeof CLOUD.invokeGradeWriting === 'function') {
+            CLOUD.invokeGradeWriting(rowId).then(gradeRes => {
+                if (gradeRes && gradeRes.ok && gradeRes.release_at) {
+                    const currentSub = authState.submissionsByLessonId[lessonId];
+                    if (currentSub) {
+                        currentSub.ai_status = gradeRes.status || 'scheduled';
+                        currentSub.ai_release_at = gradeRes.release_at;
+                        if (lessonId === getAdviceLessonId(currentAdvicePromptId)) {
+                            renderTeacherFeedbackBox(adviceTeacherFeedbackBox, currentSub);
+                        } else if (lessonId === currentEssayTopic) {
+                            renderTeacherFeedbackBox(essayTeacherFeedbackBox, currentSub);
+                        }
+                    }
+                }
+            }).catch(() => {});
+        }
+
+        if (typeof renderNotificationBell === 'function') {
+            renderNotificationBell();
+        }
+
         return { ok: true, row: savedRow };
     }
 
@@ -2212,17 +2310,187 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- 18. Supabase Auth Gate, Mandatory Profile Setup & Session Bootstrap ---
+    // --- 18. Supabase Auth Gate, Mandatory Profile Setup, Notifications & Session Bootstrap ---
     const authGateEl = document.getElementById('writing-auth-gate');
     const mainAppLayout = document.getElementById('main-app-layout');
     const topbarTeacherLink = document.getElementById('topbar-teacher-link');
+    const topbarNotifWrap = document.getElementById('topbar-notif-wrap');
+    const topbarNotifBtn = document.getElementById('topbar-notif-btn');
+    const topbarNotifBadge = document.getElementById('topbar-notif-badge');
+    const topbarNotifDropdown = document.getElementById('topbar-notif-dropdown');
+    const topbarNotifList = document.getElementById('topbar-notif-list');
     const topbarAccountPill = document.getElementById('topbar-account-pill');
     const topbarUserInitials = document.getElementById('topbar-user-initials');
     const topbarUserName = document.getElementById('topbar-user-name');
 
+    function openLessonFromNotification(lessonId) {
+        if (!lessonId) return;
+        if (lessonId.startsWith('advice-')) {
+            const promptNum = lessonId.replace('advice-', '');
+            selectAdvicePrompt(promptNum);
+            navigateToView('khuyen-nghi');
+            setTimeout(() => {
+                if (adviceTeacherFeedbackBox && adviceTeacherFeedbackBox.style.display !== 'none') {
+                    adviceTeacherFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 120);
+        } else if (ESSAY_TOPICS[lessonId]) {
+            selectEssayTopic(lessonId);
+            navigateToView('viet-luan');
+            setTimeout(() => {
+                if (essayTeacherFeedbackBox && essayTeacherFeedbackBox.style.display !== 'none') {
+                    essayTeacherFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 120);
+        }
+    }
+
+    function renderNotificationBell() {
+        if (!topbarNotifWrap || !CLOUD) return;
+        if (!currentAccount) {
+            topbarNotifWrap.style.display = 'none';
+            return;
+        }
+        topbarNotifWrap.style.display = 'inline-flex';
+
+        const esc = CLOUD.escapeHtml;
+        const fmtTime = CLOUD.formatDateTime;
+
+        const releasedList = Object.values(authState.reviewsByLessonId || {})
+            .filter(r => r && r.status === 'ready' && r.review_json && (authState.isTeacher || new Date(r.release_at || 0).getTime() <= Date.now()))
+            .sort((a, b) => new Date(b.release_at || 0).getTime() - new Date(a.release_at || 0).getTime());
+
+        const pendingList = Object.values(authState.submissionsByLessonId || {})
+            .filter(sub => sub && sub.is_submitted && !getReleasedReview(sub.lesson_id) && sub.ai_release_at && new Date(sub.ai_release_at).getTime() > Date.now())
+            .sort((a, b) => new Date(a.ai_release_at || 0).getTime() - new Date(b.ai_release_at || 0).getTime());
+
+        const unreadCount = releasedList.filter(r => !r.student_seen_at).length;
+
+        if (topbarNotifBadge) {
+            topbarNotifBadge.textContent = unreadCount > 9 ? '9+' : String(unreadCount);
+            topbarNotifBadge.style.display = unreadCount > 0 ? 'inline-flex' : 'none';
+        }
+        if (topbarNotifBtn) {
+            topbarNotifBtn.classList.toggle('has-unread', unreadCount > 0);
+        }
+
+        if (topbarNotifList) {
+            if (releasedList.length === 0 && pendingList.length === 0) {
+                topbarNotifList.innerHTML = `
+                    <div class="notif-empty-state">
+                        Chưa có bài sửa nào.<br />Khi bạn nộp bài Task 01 hoặc Task 02, bài sửa chi tiết sẽ tự động được gửi vào đây sau 12 tiếng.
+                    </div>
+                `;
+            } else {
+                const releasedHtml = releasedList.map(r => {
+                    const isUnread = !r.student_seen_at;
+                    const title = getCatalogLessonTitle(r.lesson_id, r.lesson_title || r.lesson_id);
+                    const errCount = Array.isArray(r.review_json && r.review_json.corrections) ? r.review_json.corrections.length : 0;
+                    const bandText = (r.review_json && r.review_json.estimated_band) ? ` · ${r.review_json.estimated_band}` : '';
+                    return `
+                        <button type="button" class="notif-item-btn ${isUnread ? 'unread' : ''}" data-open-review-lesson="${esc(r.lesson_id)}">
+                            <div class="notif-item-top">
+                                <span class="notif-item-tag ${isUnread ? 'new-dot' : ''}">${isUnread ? 'Mới · Đã có bài sửa' : '✓ Đã trả bài sửa'}</span>
+                                <span class="notif-item-time">${esc(fmtTime(r.release_at))}</span>
+                            </div>
+                            <div class="notif-item-title">${esc(title)}</div>
+                            <div class="notif-item-sub">Level ${esc(r.target_level || 'B1')}${esc(bandText)} · ${errCount} điểm cần chỉnh · Xem chi tiết →</div>
+                        </button>
+                    `;
+                }).join('');
+
+                const pendingHtml = pendingList.map(sub => {
+                    const title = getCatalogLessonTitle(sub.lesson_id, sub.lesson_title || sub.lesson_id);
+                    const remain = CLOUD.formatRemainingTime(sub.ai_release_at);
+                    return `
+                        <button type="button" class="notif-item-btn" data-open-review-lesson="${esc(sub.lesson_id)}">
+                            <div class="notif-item-top">
+                                <span class="notif-item-tag" style="background:#FEF3C7;color:#92400E;">⏳ Đang chờ trả bài</span>
+                                <span class="notif-item-time">Còn ${esc(remain)}</span>
+                            </div>
+                            <div class="notif-item-title">${esc(title)}</div>
+                            <div class="notif-item-sub">Dự kiến trả lúc ${esc(fmtTime(sub.ai_release_at))}</div>
+                        </button>
+                    `;
+                }).join('');
+
+                topbarNotifList.innerHTML = releasedHtml + pendingHtml;
+                topbarNotifList.querySelectorAll('[data-open-review-lesson]').forEach(btn => {
+                    btn.onclick = () => {
+                        const targetLesson = btn.getAttribute('data-open-review-lesson');
+                        authState.notifOpen = false;
+                        if (topbarNotifDropdown) topbarNotifDropdown.style.display = 'none';
+                        if (topbarNotifBtn) topbarNotifBtn.setAttribute('aria-expanded', 'false');
+                        openLessonFromNotification(targetLesson);
+                    };
+                });
+            }
+        }
+    }
+
+    async function refreshStudentReviews() {
+        const client = CLOUD ? CLOUD.getClient() : null;
+        if (!client || !currentAccount) return;
+        try {
+            const { data } = await client
+                .from('writing_ai_reviews')
+                .select('*')
+                .eq('user_id', currentAccount.id);
+            if (Array.isArray(data)) {
+                const map = {};
+                data.forEach(row => {
+                    if (row && row.lesson_id) map[row.lesson_id] = row;
+                });
+                authState.reviewsByLessonId = map;
+                renderNotificationBell();
+                renderTeacherFeedbackBox(adviceTeacherFeedbackBox, getCloudSubmission(getAdviceLessonId(currentAdvicePromptId)));
+                renderTeacherFeedbackBox(essayTeacherFeedbackBox, getCloudSubmission(currentEssayTopic));
+            }
+        } catch (e) {}
+    }
+
+    function startNotificationPolling() {
+        if (authState.notifPollTimer) {
+            clearInterval(authState.notifPollTimer);
+            authState.notifPollTimer = null;
+        }
+        authState.notifPollTimer = setInterval(() => {
+            if (currentAccount && document.visibilityState === 'visible') {
+                refreshStudentReviews();
+            }
+        }, 60000);
+    }
+
+    if (topbarNotifBtn && topbarNotifDropdown) {
+        topbarNotifBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            authState.notifOpen = !authState.notifOpen;
+            topbarNotifDropdown.style.display = authState.notifOpen ? 'block' : 'none';
+            topbarNotifBtn.setAttribute('aria-expanded', authState.notifOpen ? 'true' : 'false');
+            if (authState.notifOpen) {
+                refreshStudentReviews();
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (authState.notifOpen && !e.target.closest('#topbar-notif-wrap')) {
+                authState.notifOpen = false;
+                topbarNotifDropdown.style.display = 'none';
+                topbarNotifBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    window.addEventListener('focus', () => {
+        if (currentAccount) {
+            refreshStudentReviews();
+        }
+    });
+
     function syncTopbarAccountUI() {
         if (!currentAccount) {
             if (topbarTeacherLink) topbarTeacherLink.style.display = 'none';
+            if (topbarNotifWrap) topbarNotifWrap.style.display = 'none';
             if (topbarAccountPill) topbarAccountPill.style.display = 'none';
             return;
         }
@@ -2238,6 +2506,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (topbarUserName) {
             topbarUserName.textContent = currentAccount.name || currentAccount.email;
         }
+        renderNotificationBell();
     }
 
     function hydrateWritingViewsFromCloud() {
@@ -2259,6 +2528,13 @@ document.addEventListener('DOMContentLoaded', () => {
         authState.isTeacher = false;
         authState.needsProfileSetup = false;
         authState.submissionsByLessonId = {};
+        authState.reviewsByLessonId = {};
+        authState.notifOpen = false;
+        if (authState.notifPollTimer) {
+            clearInterval(authState.notifPollTimer);
+            authState.notifPollTimer = null;
+        }
+        if (topbarNotifDropdown) topbarNotifDropdown.style.display = 'none';
         authState.authMode = 'login';
         authState.authError = '';
         authState.authInfo = '';
@@ -2683,9 +2959,10 @@ document.addEventListener('DOMContentLoaded', () => {
         authState.authLoading = true;
         renderAuthGate();
 
-        const [profileRes, subsRes, teacherRes] = await Promise.all([
+        const [profileRes, subsRes, reviewsRes, teacherRes] = await Promise.all([
             client.from('profiles').select('*').eq('id', uid).maybeSingle(),
             client.from('writing_submissions').select('*').eq('user_id', uid),
+            client.from('writing_ai_reviews').select('*').eq('user_id', uid),
             client.rpc('is_teacher')
         ]);
 
@@ -2730,6 +3007,15 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        const reviewsMap = {};
+        if (Array.isArray(reviewsRes.data)) {
+            reviewsRes.data.forEach(row => {
+                if (row && row.lesson_id) {
+                    reviewsMap[row.lesson_id] = row;
+                }
+            });
+        }
+
         currentAccount = {
             id: uid,
             name: resolvedName,
@@ -2738,6 +3024,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         authState.submissionsByLessonId = subsMap;
+        authState.reviewsByLessonId = reviewsMap;
         authState.needsProfileSetup = !resolvedClass && !authState.isTeacher;
         authState.profileFormName = resolvedName;
         authState.profileFormClass = resolvedClass || CLOUD.CLASS_LIST[0];
@@ -2748,6 +3035,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         hydrateWritingViewsFromCloud();
         renderAuthGate();
+        startNotificationPolling();
     }
 
     (async function bootstrapWritingAuth() {

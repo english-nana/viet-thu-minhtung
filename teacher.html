@@ -12,13 +12,13 @@
     href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="./style.css?v=2.5" />
+  <link rel="stylesheet" href="./style.css?v=2.6" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div id="teacher-app"></div>
-  <script src="./supabase-config.js?v=2.4"></script>
-  <script src="./supabase-client.js?v=2.4"></script>
+  <script src="./supabase-config.js?v=2.6"></script>
+  <script src="./supabase-client.js?v=2.6"></script>
   <script>
     (function () {
       const CLOUD = window.WritingCloud;
@@ -32,6 +32,8 @@
         teacherEmail: "",
         teacherUserId: "",
         deletingUserId: "",
+        gradingSubId: "",
+        releasingSubId: "",
         authError: "",
         dbError: "",
         activeTab: "submissions", // "submissions" | "students"
@@ -86,9 +88,10 @@
         tState.dbError = "";
         renderTeacherApp();
 
-        const [profilesRes, subsRes] = await Promise.all([
+        const [profilesRes, subsRes, reviewsRes] = await Promise.all([
           client.from("profiles").select("*").order("last_active_at", { ascending: false }),
-          client.from("writing_submissions").select("*").order("submitted_at", { ascending: false })
+          client.from("writing_submissions").select("*").order("submitted_at", { ascending: false }),
+          client.from("writing_ai_reviews").select("*")
         ]);
 
         const firstErr = profilesRes.error || subsRes.error;
@@ -102,6 +105,11 @@
 
         const profiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
         const subRows = Array.isArray(subsRes.data) ? subsRes.data : [];
+        const reviewRows = Array.isArray(reviewsRes.data) ? reviewsRes.data : [];
+        const reviewBySubId = {};
+        reviewRows.forEach(r => {
+          if (r && r.submission_id) reviewBySubId[r.submission_id] = r;
+        });
 
         const profileById = {};
         const parsedById = {};
@@ -154,7 +162,10 @@
             submittedAt: CLOUD.formatDateTime(ts),
             rawTime: new Date(ts || 0).getTime(),
             teacherFeedback: row.teacher_feedback || "",
-            teacherScore: row.teacher_score || ""
+            teacherScore: row.teacher_score || "",
+            aiStatus: row.ai_status || "",
+            aiReleaseAt: row.ai_release_at || "",
+            aiReview: reviewBySubId[row.id] || null
           });
         });
 
@@ -209,6 +220,40 @@
         } else {
           alert("Lỗi lưu nhận xét: " + error.message);
         }
+      }
+
+      async function triggerTeacherAiGrade(submissionId) {
+        if (!submissionId || tState.gradingSubId) return;
+        tState.gradingSubId = submissionId;
+        renderTeacherApp();
+
+        const res = await CLOUD.invokeGradeWriting(submissionId, {
+          forceTeacher: true,
+          releaseNow: false
+        });
+        tState.gradingSubId = "";
+        if (!res.ok) {
+          renderTeacherApp();
+          alert("Không chạy được chấm sửa AI: " + (res.error || "Vui lòng kiểm tra đã deploy Edge Function grade-writing và cài GEMINI_API_KEY chưa."));
+          return;
+        }
+        await refreshCloudDashboardData();
+      }
+
+      async function releaseAiReviewNow(submissionId) {
+        const client = CLOUD.getClient();
+        if (!client || !submissionId || tState.releasingSubId) return;
+        tState.releasingSubId = submissionId;
+        renderTeacherApp();
+
+        const { error } = await client.rpc("teacher_release_review_now", { p_submission_id: submissionId });
+        tState.releasingSubId = "";
+        if (error) {
+          renderTeacherApp();
+          alert("Không trả bài sớm được: " + error.message);
+          return;
+        }
+        await refreshCloudDashboardData();
       }
 
       async function deleteStudentAccount(studentId, studentName, studentEmail) {
@@ -708,6 +753,56 @@
 
                         <div class="teacher-writing-body">${escapeHtml(sub.content || "(Bài viết trống)")}</div>
 
+                        ${(() => {
+                          const rev = sub.aiReview;
+                          const isGrading = tState.gradingSubId === sub.submissionId;
+                          const isReleasing = tState.releasingSubId === sub.submissionId;
+                          const hasReadyReview = Boolean(rev && rev.status === "ready" && rev.review_json);
+                          const relMs = rev && rev.release_at ? new Date(rev.release_at).getTime() : 0;
+                          const isWaiting12h = hasReadyReview && relMs > Date.now();
+                          const remain = isWaiting12h ? CLOUD.formatRemainingTime(rev.release_at) : "";
+                          const errCount = hasReadyReview && Array.isArray(rev.review_json.corrections) ? rev.review_json.corrections.length : 0;
+
+                          let statusHtml = `<span style="font-size:12.5px;color:#52525B;">Chưa có bài sửa chi tiết AI.</span>`;
+                          if (hasReadyReview && isWaiting12h) {
+                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Bài sửa AI đã sẵn sàng · Hẹn trả học viên lúc ${escapeHtml(CLOUD.formatDateTime(rev.release_at))} (còn ${escapeHtml(remain)})</span>`;
+                          } else if (hasReadyReview) {
+                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#166534;">✅ Đã trả bài sửa cho học viên (${escapeHtml(CLOUD.formatDateTime(rev.release_at))}) · ${rev.student_seen_at ? "Học viên đã xem" : "Học viên chưa xem"}</span>`;
+                          } else if (rev && rev.status === "error") {
+                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B91C1C;">⚠️ Lỗi chấm AI: ${escapeHtml(rev.error_message || "Thử chấm lại")}</span>`;
+                          }
+
+                          return `
+                            <div class="teacher-ai-bar">
+                              <div>${statusHtml}</div>
+                              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                ${
+                                  isWaiting12h
+                                    ? `<button type="button" class="top-pill-btn yellow" data-release-now="${escapeHtml(sub.submissionId)}" ${isReleasing ? "disabled" : ""}>
+                                        ${isReleasing ? "Đang trả..." : "⚡ Trả bài sửa ngay"}
+                                      </button>`
+                                    : ""
+                                }
+                                <button type="button" class="top-pill-btn" data-ai-grade="${escapeHtml(sub.submissionId)}" ${isGrading ? "disabled" : ""}>
+                                  ${isGrading ? "⏳ Đang chấm AI..." : hasReadyReview ? "↻ Chấm lại AI" : "✨ Tạo bài sửa AI"}
+                                </button>
+                              </div>
+                            </div>
+                            ${
+                              hasReadyReview
+                                ? `
+                                  <details class="teacher-ai-details">
+                                    <summary>📝 Xem bài sửa chi tiết (${errCount} lỗi · Level ${escapeHtml(rev.target_level || sub.targetLevel)}${rev.review_json.estimated_band ? ` · ${escapeHtml(rev.review_json.estimated_band)}` : ""})</summary>
+                                    ${CLOUD.renderWritingReviewHtml(sub.content || "", rev.review_json, {
+                                      targetLevel: rev.target_level || sub.targetLevel
+                                    })}
+                                  </details>
+                                `
+                                : ""
+                            }
+                          `;
+                        })()}
+
                         <div class="grade-row">
                           <input
                             type="text"
@@ -928,6 +1023,14 @@
               fbInp ? fbInp.value.trim() : ""
             );
           };
+        });
+
+        document.querySelectorAll("[data-ai-grade]").forEach(btn => {
+          btn.onclick = () => triggerTeacherAiGrade(btn.getAttribute("data-ai-grade"));
+        });
+
+        document.querySelectorAll("[data-release-now]").forEach(btn => {
+          btn.onclick = () => releaseAiReviewNow(btn.getAttribute("data-release-now"));
         });
       }
 
