@@ -392,7 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (viewId === 'task1-hub') {
                 dashboardCrumbEl.textContent = 'Task 01 · 8 bài học';
             } else if (viewId === 'task2-hub') {
-                dashboardCrumbEl.textContent = 'Task 02 · 11 mục';
+                dashboardCrumbEl.textContent = 'Task 02 · 12 mục';
             } else if (viewId === 'my-submissions') {
                 dashboardCrumbEl.textContent = 'Bài viết đã nộp';
             } else {
@@ -518,7 +518,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: 'Chủ đề 7: Người trẻ bỏ phố về quê', sub: 'Leaving Cities for Rural Hometowns · Advantages & Disadvantages', tag: 'Task 02', essay: 'leaving-cities' },
         { title: 'Chủ đề 8: Người trẻ thường xuyên nhảy việc', sub: 'Changing Jobs Frequently · Causes & Effects', tag: 'Task 02', essay: 'job-hopping' },
         { title: 'Chủ đề 9: Xung đột giữa cha mẹ và con tuổi teen', sub: 'Parent–Teenager Conflicts · Causes & Solutions', tag: 'Task 02', essay: 'parent-teen-conflicts' },
-        { title: 'Chủ đề 10: Nguyên nhân gây căng thẳng ở người trẻ', sub: 'Stress Among Young People · Causes Essay', tag: 'Task 02', essay: 'youth-stress' }
+        { title: 'Chủ đề 10: Nguyên nhân gây căng thẳng ở người trẻ', sub: 'Stress Among Young People · Causes Essay', tag: 'Task 02', essay: 'youth-stress' },
+        { title: 'Chủ đề 11: Người cao tuổi với Điện thoại & Internet', sub: 'Mobile Phones, the Internet & the Elderly · Two-Part Question', tag: 'Task 02', essay: 'elderly-technology' }
     ];
 
     function normalizeSearchText(str) {
@@ -3208,6 +3209,11 @@ document.addEventListener('DOMContentLoaded', () => {
             title: 'Chủ đề 10: Nguyên nhân gây căng thẳng ở người trẻ',
             storageKey: 'vstep_essay_youth_stress_draft',
             prompt: "Nowadays, many young people experience stress in their daily lives. What are the main causes of stress among young people?"
+        },
+        'elderly-technology': {
+            title: 'Chủ đề 11: Người cao tuổi với Điện thoại & Internet',
+            storageKey: 'vstep_essay_elderly_technology_draft',
+            prompt: "Mobile phones and the internet are now very useful for old people. However, this part of the population is the fewer users of mobile phones and the Internet. In which ways can mobile phones and the Internet be useful for old people? How can old people be encouraged to use this new technology?"
         }
     };
 
