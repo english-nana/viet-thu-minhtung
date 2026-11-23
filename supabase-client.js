@@ -133,25 +133,50 @@
 
   async function invokeGradeWriting(submissionId, options) {
     const client = getClient();
-    if (!client || !submissionId) {
+    const cfg = window.SUPABASE_CONFIG || {};
+    const baseUrl = String(cfg.url || "").trim().replace(/\/+$/, "");
+    const anonKey = String(cfg.anonKey || "").trim();
+    if (!client || !baseUrl || !anonKey || !submissionId) {
       return { ok: false, error: "Chưa kết nối Supabase." };
     }
     const opts = options || {};
     try {
-      const { data, error } = await client.functions.invoke("grade-writing", {
-        body: {
+      const { data: sessionData } = await client.auth.getSession();
+      const accessToken = sessionData && sessionData.session ? sessionData.session.access_token : "";
+      if (!accessToken) {
+        return { ok: false, error: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." };
+      }
+
+      const res = await fetch(`${baseUrl}/functions/v1/grade-writing`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey,
+          "Authorization": `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
           submission_id: submissionId,
           force_teacher: Boolean(opts.forceTeacher),
           release_now: Boolean(opts.releaseNow)
-        }
+        })
       });
-      if (error) {
-        return { ok: false, error: error.message || "Chưa triển khai Edge Function grade-writing." };
+
+      const rawText = await res.text().catch(() => "");
+      let parsed = null;
+      try {
+        parsed = rawText ? JSON.parse(rawText) : null;
+      } catch (e) {}
+
+      if (!res.ok || !parsed || parsed.ok !== true) {
+        const detail =
+          (parsed && (parsed.error || parsed.message || parsed.msg)) ||
+          (rawText ? rawText.slice(0, 220) : `HTTP ${res.status}`);
+        return {
+          ok: false,
+          error: `[HTTP ${res.status}] ${detail}`
+        };
       }
-      if (!data || data.ok === false) {
-        return { ok: false, error: (data && data.error) || "Không thể chấm bài tự động lúc này." };
-      }
-      return data;
+      return parsed;
     } catch (err) {
       return { ok: false, error: err && err.message ? err.message : "Lỗi kết nối hệ thống chấm bài." };
     }
