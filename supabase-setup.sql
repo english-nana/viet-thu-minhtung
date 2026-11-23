@@ -254,6 +254,7 @@ begin
 
   update public.writing_ai_reviews
   set release_at = now_ts,
+      student_seen_at = null,
       updated_at = now_ts
   where submission_id = p_submission_id;
 

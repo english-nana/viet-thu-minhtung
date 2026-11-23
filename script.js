@@ -104,6 +104,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return fallbackTitle || lessonId;
     }
 
+    function isLessonVisibleToStudent(lessonId) {
+        if (!lessonId) return false;
+        const layout = document.getElementById('main-app-layout');
+        if (!layout || layout.style.display === 'none') return false;
+        if (lessonId.startsWith('advice-')) {
+            const tab = document.getElementById('khuyen-nghi');
+            return Boolean(tab && tab.classList.contains('active') && getAdviceLessonId(currentAdvicePromptId) === lessonId);
+        }
+        const essayTab = document.getElementById('viet-luan');
+        return Boolean(essayTab && essayTab.classList.contains('active') && currentEssayTopic === lessonId);
+    }
+
     async function markReviewAsSeen(lessonId) {
         const rev = getReleasedReview(lessonId);
         if (!rev || rev.student_seen_at || !CLOUD) return;
@@ -158,7 +170,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     targetLevel: releasedReview.target_level || sub.target_level || 'B1'
                 })}
             `);
-            markReviewAsSeen(sub.lesson_id);
+            if (isLessonVisibleToStudent(sub.lesson_id)) {
+                markReviewAsSeen(sub.lesson_id);
+            }
         } else {
             const releaseAt = sub.ai_release_at || (sub.submitted_at ? new Date(new Date(sub.submitted_at).getTime() + 12 * 60 * 60 * 1000).toISOString() : '');
             const remainText = CLOUD && releaseAt ? CLOUD.formatRemainingTime(releaseAt) : '';
@@ -360,6 +374,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const adviceMenuBtn = document.getElementById('advice-toggle-sidebar-btn');
         if (adviceMenuBtn) {
             adviceMenuBtn.classList.remove('active');
+        }
+
+        if (targetView === 'khuyen-nghi' && typeof currentAdvicePromptId !== 'undefined') {
+            markReviewAsSeen(getAdviceLessonId(currentAdvicePromptId));
+        } else if (targetView === 'viet-luan' && typeof currentEssayTopic !== 'undefined') {
+            markReviewAsSeen(currentEssayTopic);
         }
 
         window.scrollTo({ top: 0, behavior: 'smooth' });

@@ -5391,6 +5391,7 @@ mark.idea-hl {
     position: relative;
     display: inline-flex;
     align-items: center;
+    overflow: visible;
 }
 
 .notif-bell-btn {
@@ -5406,26 +5407,45 @@ mark.idea-hl {
     justify-content: center;
     font-size: 15px;
     cursor: pointer;
+    overflow: visible;
     transition: all 0.12s ease;
 }
 
-.notif-bell-btn:hover,
+.notif-bell-btn:hover {
+    border-color: #18181B;
+    background: #F4F4F5;
+    color: #18181B;
+}
+
 .notif-bell-btn.has-unread {
     border-color: #18181B;
-    background: #FFFBEB;
+    background: #FFE55C;
     color: #18181B;
+    box-shadow: 2px 2px 0px #18181B;
+}
+
+@keyframes notifBadgePulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+    }
+    70% {
+        box-shadow: 0 0 0 7px rgba(239, 68, 68, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
 }
 
 .notif-unread-badge {
     position: absolute;
-    top: -6px;
-    right: -6px;
-    min-width: 18px;
-    height: 18px;
+    top: -7px;
+    right: -7px;
+    min-width: 19px;
+    height: 19px;
     padding: 0 5px;
     border-radius: 999px;
-    background: #DC2626;
-    border: 1.5px solid #FFFFFF;
+    background: #EF4444;
+    border: 2px solid #FFFFFF;
     color: #FFFFFF;
     font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
     font-size: 10.5px;
@@ -5434,6 +5454,8 @@ mark.idea-hl {
     align-items: center;
     justify-content: center;
     line-height: 1;
+    z-index: 10;
+    animation: notifBadgePulse 1.8s infinite;
 }
 
 .notif-dropdown {
