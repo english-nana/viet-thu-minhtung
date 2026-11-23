@@ -2219,7 +2219,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const topbarAccountPill = document.getElementById('topbar-account-pill');
     const topbarUserInitials = document.getElementById('topbar-user-initials');
     const topbarUserName = document.getElementById('topbar-user-name');
-    const topbarUserClass = document.getElementById('topbar-user-class');
 
     function syncTopbarAccountUI() {
         if (!currentAccount) {
@@ -2238,14 +2237,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (topbarUserName) {
             topbarUserName.textContent = currentAccount.name || currentAccount.email;
-        }
-        if (topbarUserClass) {
-            if (currentAccount.className) {
-                topbarUserClass.textContent = `Lớp ${currentAccount.className}`;
-                topbarUserClass.style.display = 'inline-flex';
-            } else {
-                topbarUserClass.style.display = 'none';
-            }
         }
     }
 
