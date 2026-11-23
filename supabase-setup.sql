@@ -265,13 +265,13 @@ begin
 end;
 $$;
 
--- 5. CẤP QUYỀN TRUY CẬP SCHEMA & BẢNG CHO TÀI KHOẢN ĐÃ ĐĂNG NHẬP
-grant usage on schema public to anon, authenticated;
-grant select on table public.teachers to authenticated;
-grant select, insert, update, delete on table public.profiles to authenticated;
-grant select, insert, update, delete on table public.writing_submissions to authenticated;
-grant select, insert, update, delete on table public.writing_ai_reviews to authenticated;
-grant execute on function public.is_teacher() to anon, authenticated;
-grant execute on function public.teacher_delete_student(uuid) to authenticated;
-grant execute on function public.mark_writing_review_seen(text) to authenticated;
-grant execute on function public.teacher_release_review_now(text) to authenticated;
+-- 5. CẤP QUYỀN TRUY CẬP SCHEMA & BẢNG CHO TÀI KHOẢN ĐÃ ĐĂNG NHẬP & SERVICE_ROLE (EDGE FUNCTION)
+grant usage on schema public to anon, authenticated, service_role;
+grant select on table public.teachers to authenticated, service_role;
+grant select, insert, update, delete on table public.profiles to authenticated, service_role;
+grant select, insert, update, delete on table public.writing_submissions to authenticated, service_role;
+grant select, insert, update, delete on table public.writing_ai_reviews to authenticated, service_role;
+grant execute on function public.is_teacher() to anon, authenticated, service_role;
+grant execute on function public.teacher_delete_student(uuid) to authenticated, service_role;
+grant execute on function public.mark_writing_review_seen(text) to authenticated, service_role;
+grant execute on function public.teacher_release_review_now(text) to authenticated, service_role;

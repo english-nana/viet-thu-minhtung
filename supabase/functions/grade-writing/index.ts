@@ -152,7 +152,9 @@ Deno.serve(async (req: Request) => {
     }
     const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
 
-    const admin = createClient(supabaseUrl, supabaseServiceRoleKey);
+    const admin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
     const { data: authData, error: authErr } = await admin.auth.getUser(jwt);
     if (authErr || !authData?.user) {
       return jsonResponse({ ok: false, error: "Phiên đăng nhập không hợp lệ: " + (authErr?.message || "") }, 401);
@@ -174,8 +176,17 @@ Deno.serve(async (req: Request) => {
       admin.from("teachers").select("email").ilike("email", callerEmail).maybeSingle()
     ]);
 
-    if (subErr || !sub) {
-      return jsonResponse({ ok: false, error: "Không tìm thấy bài viết trên hệ thống." }, 404);
+    if (subErr) {
+      return jsonResponse(
+        { ok: false, error: `Lỗi đọc writing_submissions (${subErr.code || "DB"}): ${subErr.message}` },
+        500
+      );
+    }
+    if (!sub) {
+      return jsonResponse(
+        { ok: false, error: `Không tìm thấy bài viết trên hệ thống (id: ${submissionId}).` },
+        404
+      );
     }
 
     const isTeacher = Boolean(teacherRow) || callerEmail === "mtung0208@gmail.com";
@@ -307,7 +318,7 @@ Deno.serve(async (req: Request) => {
 
     const nextCount = isTeacher ? Math.max(1, prevCount) : prevCount + 1;
 
-    await admin.from("writing_ai_reviews").upsert(
+    const { error: upsertRevErr } = await admin.from("writing_ai_reviews").upsert(
       {
         submission_id: submissionId,
         user_id: sub.user_id,
@@ -326,13 +337,27 @@ Deno.serve(async (req: Request) => {
       { onConflict: "submission_id" }
     );
 
-    await admin
+    if (upsertRevErr) {
+      return jsonResponse(
+        { ok: false, error: `Lỗi lưu bài sửa vào writing_ai_reviews: ${upsertRevErr.message}` },
+        500
+      );
+    }
+
+    const { error: updSubErr } = await admin
       .from("writing_submissions")
       .update({
         ai_status: shouldReleaseImmediately ? "ready" : "scheduled",
         ai_release_at: releaseAtIso
       })
       .eq("id", submissionId);
+
+    if (updSubErr) {
+      return jsonResponse(
+        { ok: false, error: `Lỗi cập nhật trạng thái writing_submissions: ${updSubErr.message}` },
+        500
+      );
+    }
 
     // QUAN TRỌNG: Chỉ trả chi tiết bài sửa ngay nếu người gọi là Giáo viên;
     // học viên chỉ nhận thời điểm hẹn trả sau 12 tiếng để không thể xem trước!
