@@ -1877,9 +1877,10 @@ footer {
     box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);
 }
 
-/* --- Compact Layout for Thư Cho Lời Khuyên (Tab 2) & Viết Luận (Tab 9) — Draft Split-Screen Style --- */
+/* --- Compact Layout for Thư Cho Lời Khuyên (Tab 2), Thư Hỏi Thông Tin (Tab 3) & Viết Luận (Tab 9) — Draft Split-Screen Style --- */
 .app-layout.split-tab-active .content-area,
 .content-area:has(#khuyen-nghi.active),
+.content-area:has(#hoi-thong-tin.active),
 .content-area:has(#viet-luan.active) {
     padding: 0 !important;
     height: calc(100vh - 54px);
@@ -1890,6 +1891,7 @@ footer {
 
 .app-layout.split-tab-active .container-tab,
 .content-area:has(#khuyen-nghi.active) .container-tab,
+.content-area:has(#hoi-thong-tin.active) .container-tab,
 .content-area:has(#viet-luan.active) .container-tab {
     max-width: 100% !important;
     width: 100%;
@@ -1898,6 +1900,7 @@ footer {
 }
 
 #khuyen-nghi.active,
+#hoi-thong-tin.active,
 #viet-luan.active {
     display: flex;
     flex-direction: column;
@@ -2871,7 +2874,11 @@ footer {
 @media (max-width: 992px) {
     .app-layout.split-tab-active .content-area,
     .content-area:has(#khuyen-nghi.active),
+    .content-area:has(#hoi-thong-tin.active),
+    .content-area:has(#viet-luan.active),
     #khuyen-nghi.active,
+    #hoi-thong-tin.active,
+    #viet-luan.active,
     .draft-lesson-view {
         height: auto;
         max-height: none;
@@ -5060,6 +5067,7 @@ mark.idea-hl {
 
 /* Teacher Feedback Display Box on Student Writing Screen */
 #advice-teacher-feedback-box,
+#inquiry-teacher-feedback-box,
 #essay-teacher-feedback-box {
     background: transparent;
     border: none;

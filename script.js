@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
         notifOpen: false,
         notifPollTimer: null,
         isSubmittingAdvice: false,
+        isSubmittingInquiry: false,
         isSubmittingEssay: false
     };
 
@@ -111,6 +112,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lessonId.startsWith('advice-')) {
             const tab = document.getElementById('khuyen-nghi');
             return Boolean(tab && tab.classList.contains('active') && getAdviceLessonId(currentAdvicePromptId) === lessonId);
+        }
+        if (lessonId.startsWith('inquiry-')) {
+            const tab = document.getElementById('hoi-thong-tin');
+            return Boolean(tab && tab.classList.contains('active') && getInquiryLessonId(currentInquiryPromptId) === lessonId);
         }
         const essayTab = document.getElementById('viet-luan');
         return Boolean(essayTab && essayTab.classList.contains('active') && currentEssayTopic === lessonId);
@@ -272,6 +277,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         currentSub.ai_release_at = gradeRes.release_at;
                         if (lessonId === getAdviceLessonId(currentAdvicePromptId)) {
                             renderTeacherFeedbackBox(adviceTeacherFeedbackBox, currentSub);
+                        } else if (lessonId === getInquiryLessonId(currentInquiryPromptId)) {
+                            renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, currentSub);
                         } else if (lessonId === currentEssayTopic) {
                             renderTeacherFeedbackBox(essayTeacherFeedbackBox, currentSub);
                         }
@@ -466,7 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Toggle split-pane full-height layout for split workspaces
         if (appLayout) {
             appLayout.classList.remove('sidebar-open');
-            if (targetView === 'khuyen-nghi' || targetView === 'viet-luan') {
+            if (targetView === 'khuyen-nghi' || targetView === 'hoi-thong-tin' || targetView === 'viet-luan') {
                 appLayout.classList.add('split-tab-active');
             } else {
                 appLayout.classList.remove('split-tab-active');
@@ -482,6 +489,8 @@ document.addEventListener('DOMContentLoaded', () => {
             renderMySubmissionsView();
         } else if (targetView === 'khuyen-nghi' && typeof currentAdvicePromptId !== 'undefined') {
             markReviewAsSeen(getAdviceLessonId(currentAdvicePromptId));
+        } else if (targetView === 'hoi-thong-tin' && typeof currentInquiryPromptId !== 'undefined') {
+            markReviewAsSeen(getInquiryLessonId(currentInquiryPromptId));
         } else if (targetView === 'viet-luan' && typeof currentEssayTopic !== 'undefined') {
             markReviewAsSeen(currentEssayTopic);
         }
@@ -493,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const QUICK_SEARCH_CATALOG = [
         { title: 'Lý thuyết chung: Viết Thư & Email', sub: 'Task 01 · Bố cục 3 phần, văn phong Formal/Informal', tag: 'Task 01', view: 'ly-thuyet' },
         { title: 'Thư khuyên / đề xuất (5 đề)', sub: 'Mua hàng online (Jay), Hội thảo (Carol), Du lịch Hà Nội, Chuyển nhà, Mùa hè', tag: 'Task 01', view: 'khuyen-nghi' },
-        { title: 'Thư hỏi thông tin (3 đề)', sub: 'Rainbow Language Center, khóa tiếng Anh mùa hè, kỹ năng mềm', tag: 'Task 01', view: 'hoi-thong-tin' },
+        { title: 'Thư hỏi thông tin (4 đề)', sub: 'Vé xem hòa nhạc (Alex), Rainbow Language Center, khóa tiếng Anh mùa hè, kỹ năng mềm', tag: 'Task 01', view: 'hoi-thong-tin' },
         { title: 'Thư cung cấp thông tin (6 đề)', sub: 'Quê hương (John), Hoa (Emily), tiệc chào mừng, chuyến đi, thể thao, tuyển dụng', tag: 'Task 01', view: 'cung-cap-thong-tin' },
         { title: 'Thư phàn nàn (4 đề)', sub: 'Phòng thay đồ, thiết bị nhà bếp hỏng, đơn hàng Shopee, nhà hàng', tag: 'Task 01', view: 'phan-nan' },
         { title: 'Thư cho đánh giá / phản hồi (3 đề)', sub: 'Khách sạn, nhà sách, đánh giá sách cho Mia', tag: 'Task 01', view: 'danh-gia' },
@@ -1666,7 +1675,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         <th>Từ / Cụm từ</th>
                                         <th>Loại từ</th>
                                         <th>Nghĩa tiếng Việt</th>
-                                        <th>Ví dụ trong bài</th>
+                                        <th>${data.exampleColHeader || 'Ví dụ trong bài'}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -2184,6 +2193,965 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // --- 16b. Thư Hỏi Thông Tin (#hoi-thong-tin) — Split-Screen Workspace (4 Đề) ---
+    const inquiryWorkspace = document.getElementById('inquiry-split-workspace');
+    const inquiryResizer = document.getElementById('inquiry-split-resizer');
+    const inquiryLevelBtns = document.querySelectorAll('[data-inquiry-level]');
+    const inquiryGuideB1 = document.getElementById('inquiry-guide-B1');
+    const inquiryGuideB2 = document.getElementById('inquiry-guide-B2');
+    const inquiryCurrentLevelTag = document.getElementById('inquiry-current-level-tag');
+    const inquiryTheoryScrollPane = document.getElementById('inquiry-theory-scroll-pane');
+    const inquiryPromptSelect = document.getElementById('inquiry-prompt-select');
+    const inquiryPromptNumBtns = document.querySelectorAll('[data-inquiry-prompt]');
+    const inquiryExNumPill = document.getElementById('inquiry-ex-num-pill');
+    const inquiryExTitle = document.getElementById('inquiry-ex-title');
+    const inquiryTogglePromptTransBtn = document.getElementById('inquiry-toggle-prompt-trans-btn');
+    const inquiryPromptCard = document.getElementById('inquiry-prompt-card');
+    const inquiryTimerBtn = document.getElementById('inquiry-timer-btn');
+    const inquiryTimerDisplay = document.getElementById('inquiry-timer-display');
+    const inquiryTextarea = document.getElementById('inquiry-writing-textarea');
+    const inquiryWcEl = document.getElementById('inquiry-writing-wc');
+    const inquiryStatusEl = document.getElementById('inquiry-writing-status');
+    const inquirySubmitBtn = document.getElementById('inquiry-submit-btn');
+    const inquiryResetBtn = document.getElementById('inquiry-reset-btn');
+    const inquiryPeekSampleBtn = document.getElementById('inquiry-peek-sample-btn');
+    const inquiryFeedbackBox = document.getElementById('inquiry-writing-feedback');
+    const inquiryTeacherFeedbackBox = document.getElementById('inquiry-teacher-feedback-box');
+    const inquiryFeedbackTitle = document.getElementById('inquiry-feedback-title');
+    const inquiryFbTabs = document.querySelectorAll('[data-inquiry-fb-level]');
+    const inquiryFbSampleB1 = document.getElementById('inquiry-fb-sample-B1');
+    const inquiryFbSampleB2 = document.getElementById('inquiry-fb-sample-B2');
+
+    let currentInquiryPromptId = '1';
+    let currentInquiryLevel = 'B1';
+    let isCurrentInquirySubmitted = false;
+
+    const INQUIRY_PROMPTS_DATA = {
+        '1': {
+            numLabel: 'Đề 1',
+            taskTitle: 'Write an inquiry email to Alex about a concert ticket',
+            placeholder: 'Dear Alex,\n\nViết bài của bạn ở đây…',
+            promptEn: 'Your friend bought a concert ticket but now wants to pass it on to you. Write an email to your friend. In your email, you should:',
+            promptVi: 'Người bạn của bạn đã mua một vé xem hòa nhạc nhưng hiện muốn nhượng lại cho bạn. Hãy viết một email cho bạn của mình. Trong email, bạn nên:',
+            bullets: [
+                {
+                    en: 'Ask for details about the ticket (price, seat, and performer)',
+                    vi: 'Hỏi chi tiết về chiếc vé (giá vé, vị trí ghế ngồi và nghệ sĩ biểu diễn)'
+                },
+                {
+                    en: 'Ask how you can receive the ticket',
+                    vi: 'Hỏi cách bạn có thể nhận chiếc vé'
+                },
+                {
+                    en: 'Ask what is included in the program besides the music show',
+                    vi: 'Hỏi xem chương trình còn bao gồm những gì ngoài buổi biểu diễn âm nhạc'
+                }
+            ],
+            footerEn: 'Write at least 120 words. You do not need to include your name or addresses. Your response will be evaluated in terms of Task Fulfillment, Organization, Vocabulary and Grammar.',
+            footerVi: 'Viết ít nhất 120 từ. Bạn không cần ghi tên hoặc địa chỉ của mình. Bài viết của bạn sẽ được đánh giá dựa trên các tiêu chí: Mức độ hoàn thành yêu cầu đề bài (Task Fulfillment), Bố cục (Organization), Từ vựng (Vocabulary) và Ngữ pháp (Grammar).',
+            sampleB1: [
+                '<strong>Dear Alex,</strong>',
+                'How are you doing? I hope you’re doing well. Thanks for thinking of me! I’d be happy to take the concert ticket because I’m free that evening. Before I make a decision, could you tell me a few more details about it? For example, how much did you pay for the ticket, where is the seat, and who is performing?',
+                'I’d also like to know how I can get the ticket from you. Could you give it to me at school, or would it be easier to send it to me by email? Oh … and one more thing, could you tell me what is included in the program besides the music show? Are there any games, food stalls, or special activities?',
+                'Thanks again for offering me the ticket. Let me know when you are free.',
+                '<strong>Best wishes,</strong>'
+            ],
+            sampleB2: [
+                '<strong>Dear Alex,</strong>',
+                'It’s been a long time since we last talked. How have you been? Thanks so much for offering me your concert ticket. I’d love to go, especially because I haven’t been to a live concert for a long time. Before I confirm, could you tell me how much you paid for it, where the seat is located, and which singer or band will be performing?',
+                'I’d also like to know how I can receive the ticket. Would it be possible for you to send me the e-ticket, or should I meet you to collect a printed one? Finally, could you let me know whether the program includes anything besides the music performance, such as food stalls, games, or a chance to meet the performers? It would be useful to know what to expect and when to arrive.',
+                'Thanks again for thinking of me. I’m looking forward to your reply.',
+                '<strong>Best wishes,</strong>'
+            ],
+            b1: {
+                titleEn: 'Concert Ticket Inquiry — Level B1',
+                titleVi: 'Gợi ý từ vựng, cấu trúc và dàn ý trình độ B1',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Ở trình độ <strong>Level B1</strong>, bạn viết một bức thư điện tử thân mật (informal email) gửi bạn bè để cảm ơn lời nhượng vé và hỏi rõ 3 nhóm thông tin theo đề bằng các câu hỏi lịch sự, dễ hiểu (<em>Could you tell me..., I’d also like to know..., Are there any...?</em>).',
+                stepsHeader: 'Bố cục bức thư hỏi thông tin gửi Alex (Level B1) gồm 4 phần:',
+                steps: [
+                    '1. <strong>Mở thư &amp; Ý 1 (Chi tiết vé):</strong> Chào Alex, hỏi thăm sức khỏe, cảm ơn vì đã nghĩ đến mình và tỏ ý sẵn sàng lấy vé; hỏi 3 thông tin cụ thể: giá vé (<em>price</em>), vị trí ghế (<em>seat</em>) và nghệ sĩ biểu diễn (<em>performer</em>).',
+                    '2. <strong>Ý 2 (Cách nhận vé):</strong> Hỏi cách lấy vé trực tiếp (ví dụ gặp ở trường) hay nhận qua email để tiện hơn.',
+                    '3. <strong>Ý 3 (Hoạt động đi kèm):</strong> Chuyển ý tự nhiên (<em>Oh ... and one more thing</em>) để hỏi thêm ngoài buổi diễn âm nhạc còn có trò chơi, quầy đồ ăn hay hoạt động đặc biệt nào không.',
+                    '4. <strong>Kết thư:</strong> Cảm ơn một lần nữa vì lời nhượng vé, hẹn bạn báo lịch rảnh và ký tên thân mật (<em>Best wishes,</em>).'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử thân mật hỏi thông tin (Informal email asking for information).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Bạn bè (đề không nêu tên nên đặt một tên tiếng Anh thân quen như <em>Alex</em>); giọng văn tự nhiên, nhiệt tình, có thể dùng dạng viết tắt (<em>you’re, I’d, I’m</em>).',
+                    '<strong>3 yêu cầu bắt buộc trong đề:</strong><ul><li>Hỏi chi tiết về vé: giá tiền, vị trí ghế ngồi và nghệ sĩ biểu diễn (<em>price, seat, and performer</em>).</li><li>Hỏi cách nhận vé từ bạn (<em>how you can receive the ticket</em>).</li><li>Hỏi những hoạt động có trong chương trình ngoài phần biểu diễn âm nhạc (<em>what is included in the program besides the music show</em>).</li></ul>',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc hỏi thông tin B1:</strong><ul><li>Hỏi lịch sự: <code>Before I make a decision, could you tell me...?</code></li><li>Hỏi nối tiếp bằng câu gián tiếp: <code>I’d also like to know how I can + V...</code></li><li>Đưa 2 phương án để bạn dễ trả lời: <code>Could you + V..., or would it be easier to + V...?</code></li><li>Chuyển sang câu hỏi cuối thân mật: <code>Oh ... and one more thing, could you tell me what is included in...?</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Chào Alex, hỏi thăm sức khỏe, cảm ơn bạn đã nhớ tới mình và nói mình rất vui nhận vé vì tối hôm đó rảnh.',
+                    '<strong>2. Hỏi chi tiết về vé (Ý 1):</strong> Nêu rằng trước khi quyết định, bạn muốn hỏi thêm vài chi tiết: bạn ấy mua vé bao nhiêu tiền, ghế ngồi ở khu vực nào và ai sẽ biểu diễn.',
+                    '<strong>3. Hỏi cách nhận vé (Ý 2):</strong> Hỏi xem có thể nhận vé bằng cách nào — đưa trực tiếp ở trường hay gửi qua email sẽ tiện hơn.',
+                    '<strong>4. Hỏi các hoạt động khác trong chương trình (Ý 3):</strong> Hỏi thêm ngoài phần biểu diễn âm nhạc, chương trình còn có trò chơi, quầy đồ ăn hay hoạt động đặc biệt nào đi kèm không.',
+                    '<strong>5. Kết thư &amp; Ký tên:</strong> Cảm ơn bạn lần nữa, nhắn bạn báo lúc rảnh và ký tên thân mật (<em>Best wishes,</em>).'
+                ],
+                vocab: [
+                    ['make a decision', 'v. phr.', 'đưa ra quyết định', 'I need a few minutes to make a decision about the trip.'],
+                    ['concert ticket', 'n. phr.', 'vé xem hòa nhạc', 'She bought two concert tickets for Saturday night.'],
+                    ['perform', 'v.', 'biểu diễn', 'A famous rock group will perform at the city stadium.'],
+                    ['send by email', 'v. phr.', 'gửi qua email', 'The organizer will send the schedule by email tomorrow.'],
+                    ['be included in', 'v. phr.', 'được bao gồm trong', 'Breakfast is included in the hotel room price.'],
+                    ['besides', 'prep.', 'ngoài ra, bên cạnh', 'Besides swimming, the resort offers yoga classes.'],
+                    ['food stalls', 'n. phr.', 'các quầy bán đồ ăn', 'There are many local food stalls around the night market.'],
+                    ['special activities', 'n. phr.', 'các hoạt động đặc biệt', 'The festival has special activities for young visitors.']
+                ],
+                tipTitle: 'Mẹo viết thư hỏi thông tin Level B1 đạt điểm cao',
+                tipText: 'Khi hỏi bạn bè về vé hoặc sự kiện, đừng chỉ hỏi cộc lốc 3 câu ngắn — hãy đưa thêm <strong>1–2 gợi ý cụ thể</strong> (như <em>at school or by email</em>; <em>games, food stalls, or special activities</em>) để câu hỏi tự nhiên, sinh động và dễ đạt trên 120 từ.'
+            },
+            b2: {
+                titleEn: 'Concert Ticket Inquiry — Level B2',
+                titleVi: 'Gợi ý từ vựng nâng cao, cấu trúc tự nhiên và dàn ý trình độ B2',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Ở trình độ <strong>Level B2</strong>, bài viết nâng cấp rõ nét độ mượt của câu hỏi gián tiếp (<em>could you tell me how much you paid / where the seat is located / whether the program includes...</em>), kết hợp lý do cá nhân tự nhiên (<em>especially because I haven’t been to a live concert...</em>) và vốn từ chính xác (<em>e-ticket, collect a printed one, music performance, what to expect</em>).',
+                stepsHeader: 'Các điểm nâng cấp giúp bài viết đạt chuẩn Level B2:',
+                steps: [
+                    '1. <strong>Mở thư &amp; Ý 1 (Chi tiết vé):</strong> Mở thư tự nhiên bằng thì hiện tại hoàn thành (<em>It’s been a long time... / haven’t been to a live concert</em>), dùng cụm <em>Before I confirm</em> và lồng ghép mượt 3 câu hỏi gián tiếp (<em>how much you paid, where the seat is located, which singer or band will be performing</em>).',
+                    '2. <strong>Ý 2 (Cách nhận vé):</strong> Nâng cấp bằng cấu trúc lịch sự <em>Would it be possible for you to send me the e-ticket, or should I meet you to collect a printed one?</em>',
+                    '3. <strong>Ý 3 (Hoạt động đi kèm):</strong> Dùng câu hỏi gián tiếp với <em>whether</em> (<em>let me know whether the program includes anything besides the music performance</em>) + liệt kê ví dụ thực tế và thêm câu giải thích mục đích (<em>It would be useful to know what to expect and when to arrive</em>).',
+                    '4. <strong>Kết thư tự nhiên:</strong> Cảm ơn vì đã nghĩ tới mình, bày tỏ mong đợi phản hồi và ký tên thân mật (<em>Best wishes,</em>).'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử thân mật hỏi thông tin chi tiết (Informal inquiry email).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Alex (bạn thân); giọng văn thân mật nhưng trôi chảy, câu ghép đa dạng và chú ý đúng trật tự từ trong câu hỏi gián tiếp.',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc ăn điểm Level B2:</strong><ul><li>Câu hỏi gián tiếp chuẩn trật tự S + V (KHÔNG đảo ngữ): <code>could you tell me how much you paid, where the seat is located, and which singer or band will be performing?</code></li><li>Đề nghị phương án lịch sự: <code>Would it be possible for you to + V..., or should I + V...?</code></li><li>Câu hỏi <em>Yes/No</em> gián tiếp với <em>whether</em>: <code>could you let me know whether the program includes anything besides...?</code></li><li>Bổ sung lý do hợp lý sau câu hỏi: <code>It would be useful to know what to expect and when to arrive.</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Hỏi thăm sau một thời gian chưa trò chuyện, cảm ơn Alex đã nhượng vé và bày tỏ sự hào hứng vì lâu rồi chưa đi xem hòa nhạc trực tiếp.',
+                    '<strong>2. Hỏi chi tiết về vé (Ý 1):</strong> Trước khi xác nhận (<em>Before I confirm</em>), gộp 3 ý giá vé, vị trí ghế ngồi (<em>where the seat is located</em>) và ca sĩ/ban nhạc biểu diễn vào một câu hỏi gián tiếp mạch lạc.',
+                    '<strong>3. Hỏi cách nhận vé (Ý 2):</strong> Hỏi cách nhận vé và đưa hai phương án rõ ràng: gửi vé điện tử (<em>e-ticket</em>) hay gặp trực tiếp để lấy vé giấy (<em>collect a printed one</em>).',
+                    '<strong>4. Hỏi các hoạt động khác trong chương trình (Ý 3):</strong> Dùng <em>whether</em> hỏi liệu chương trình có hoạt động gì khác ngoài buổi diễn âm nhạc (quầy đồ ăn, trò chơi, cơ hội gặp gỡ nghệ sĩ), kèm lý do muốn biết trước để chủ động giờ đến.',
+                    '<strong>5. Kết thư &amp; Ký tên:</strong> Cảm ơn bạn lần nữa, bày tỏ mong sớm nhận hồi âm và ký tên (<em>Best wishes,</em>).'
+                ],
+                vocab: [
+                    ['live concert', 'n. phr.', 'buổi hòa nhạc trực tiếp', 'Attending a live concert is much more exciting than watching videos online.'],
+                    ['confirm', 'v.', 'xác nhận', 'Please check the schedule before you confirm your attendance.'],
+                    ['be located', 'v. phr.', 'nằm ở vị trí', 'The exhibition hall is located on the third floor.'],
+                    ['e-ticket', 'n.', 'vé điện tử', 'Passengers can show their e-ticket on a smartphone at the gate.'],
+                    ['collect a printed one', 'v. phr.', 'nhận một bản vé in', 'You can go to the box office to collect a printed one.'],
+                    ['music performance', 'n. phr.', 'buổi biểu diễn âm nhạc', 'Everyone applauded loudly at the end of the music performance.'],
+                    ['a chance to meet', 'n. phr.', 'cơ hội được gặp gỡ', 'Workshop guests had a chance to meet the author after the talk.'],
+                    ['what to expect', 'phr.', 'những gì sẽ diễn ra / cần chuẩn bị', 'Reading the event guide helps visitors know what to expect.']
+                ],
+                upgrades: [
+                    ['Mở thư', 'I’d be happy to take the concert ticket because I’m free that evening.', '<strong>I’d love to go, especially because I haven’t been to a live concert for a long time.</strong>'],
+                    ['Hỏi chi tiết vé', 'Before I make a decision... how much did you pay, where is the seat, and who is performing?', '<strong>Before I confirm</strong>, could you tell me <strong>how much you paid for it, where the seat is located, and which singer or band will be performing?</strong>'],
+                    ['Hỏi cách nhận vé', 'Could you give it to me at school, or would it be easier to send it to me by email?', '<strong>Would it be possible for you to send me the e-ticket, or should I meet you to collect a printed one?</strong>'],
+                    ['Hoạt động đi kèm', 'Oh … and one more thing, could you tell me what is included in the program besides the music show?', '<strong>Finally, could you let me know whether the program includes anything besides the music performance... It would be useful to know what to expect and when to arrive.</strong>']
+                ],
+                tipTitle: 'Mẹo nâng band điểm từ B1 lên B2',
+                tipText: 'Lỗi phổ biến nhất của thí sinh B1 khi hỏi thông tin là đảo ngữ sai trong câu hỏi gián tiếp (ví dụ viết nhầm <em>could you tell me where is the seat</em>). Ở mức B2, hãy giữ đúng trật tự <strong>S + V</strong> (<em>where the seat is located / how much you paid</em>) và dùng <strong>whether</strong> cho câu hỏi Có/Không!'
+            }
+        },
+        '2': {
+            numLabel: 'Đề 2',
+            taskTitle: 'Write an inquiry email to John about Rainbow Language Center',
+            placeholder: 'Dear John,\n\nViết bài của bạn ở đây…',
+            promptEn: 'Your friend has just completed an English course at Rainbow Language Center and had a great experience. You are planning to study English as well and would like to know more about the course. Write an email to your friend. In your email, you should ask about:',
+            promptVi: 'Người bạn của bạn vừa hoàn thành một khóa học tiếng Anh tại Trung tâm Ngoại ngữ Rainbow và đã có trải nghiệm rất tuyệt vời. Bạn cũng đang dự định học tiếng Anh và muốn biết thêm thông tin về khóa học. Hãy viết một email cho bạn của mình. Trong email, bạn nên hỏi về:',
+            bullets: [
+                {
+                    en: 'The address of the center',
+                    vi: 'Địa chỉ của trung tâm'
+                },
+                {
+                    en: 'The tuition fee',
+                    vi: 'Học phí của khóa học'
+                },
+                {
+                    en: 'The teachers',
+                    vi: 'Đội ngũ giáo viên'
+                },
+                {
+                    en: 'The training program',
+                    vi: 'Chương trình đào tạo'
+                }
+            ],
+            footerEn: 'Write at least 120 words. You do not need to include your name or addresses. Your response will be evaluated in terms of Task Fulfillment, Organization, Vocabulary and Grammar.',
+            footerVi: 'Viết ít nhất 120 từ. Bạn không cần ghi tên hoặc địa chỉ của mình. Bài viết của bạn sẽ được đánh giá dựa trên các tiêu chí: Mức độ hoàn thành yêu cầu đề bài (Task Fulfillment), Bố cục (Organization), Từ vựng (Vocabulary) và Ngữ pháp (Grammar).',
+            sampleB1: [
+                '<strong>Dear John,</strong>',
+                'How are you doing? I hope you and your family are doing well. I heard that you’ve just finished an English course at Rainbow Language Center and really enjoyed it. I’m also planning to study English soon, so I’m writing to ask for some information about the course before I register.',
+                'Firstly, could you tell me the address of the center? I’d like to know whether it is near the city center and easy to find. Also, how much is the tuition fee? Since I’m going to study with my friend, does the center offer any discounts?',
+                'Moreover, could you tell me what the teachers are like? Are they friendly and experienced, and are there any native teachers? Finally, can you tell me more about the training program, such as how long the course lasts and what the class schedule is like?',
+                'Thanks a lot for your help. I’m looking forward to hearing from you soon.',
+                '<strong>Best wishes,</strong>'
+            ],
+            sampleB2: [
+                '<strong>Dear John,</strong>',
+                'It’s been a long time since we last caught up. How have you been? I heard that you recently completed an English course at Rainbow Language Center and had a wonderful experience there. As I’m planning to improve my English in the near future, I’d love to ask you a few questions before making a decision.',
+                'First of all, could you let me know the exact address of the center and whether it is convenient to get there by public transport? In addition, I’d like to ask about the tuition fee and whether they provide any discounts for students who sign up in pairs, as a friend of mine wants to join too.',
+                'I’m also curious about the teaching staff. Are the teachers supportive and well-qualified, and do native speakers teach any of the speaking lessons? Finally, could you share some details about the training program, including the course duration, class size, and weekly schedule?',
+                'Thank you so much for your time. I look forward to hearing back from you soon.',
+                '<strong>Best wishes,</strong>'
+            ],
+            b1: {
+                titleEn: 'Rainbow Language Center Inquiry — Level B1',
+                titleVi: 'Gợi ý từ vựng, cấu trúc và dàn ý trình độ B1',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Ở trình độ <strong>Level B1</strong>, đề này có tới <strong>4 gạch đầu dòng</strong> (địa chỉ, học phí, giáo viên, chương trình đào tạo). Cách viết gọn và rõ nhất là gom thành <strong>2 đoạn thân bài</strong> (Đoạn 1: Địa chỉ + Học phí; Đoạn 2: Giáo viên + Chương trình học) với các từ nối <em>Firstly, Also, Moreover, Finally</em>.',
+                stepsHeader: 'Bố cục bức thư hỏi thông tin gửi John (Level B1) gồm 4 phần:',
+                steps: [
+                    '1. <strong>Mở thư:</strong> Chào John, hỏi thăm sức khỏe, nhắc việc bạn vừa học xong ở Rainbow Language Center và nêu mục đích viết thư hỏi thông tin trước khi đăng ký.',
+                    '2. <strong>Thân bài 1 (Địa chỉ &amp; Học phí):</strong> Hỏi địa chỉ trung tâm có gần khu trung tâm không; hỏi học phí và liệu đi học cùng bạn có được giảm giá không.',
+                    '3. <strong>Thân bài 2 (Giáo viên &amp; Chương trình):</strong> Hỏi giáo viên có thân thiện, giàu kinh nghiệm hay có giáo viên bản xứ không; hỏi thêm thời lượng khóa học và lịch học.',
+                    '4. <strong>Kết thư:</strong> Cảm ơn sự giúp đỡ của bạn, mong sớm nhận hồi âm và ký tên thân mật (<em>Best wishes,</em>).'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử thân mật hỏi thông tin khóa học (Informal inquiry email).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Bạn thân (<em>John</em>); giọng văn gần gũi, rõ ràng, thân mật.',
+                    '<strong>4 yêu cầu bắt buộc trong đề:</strong><ul><li>Địa chỉ của trung tâm (<em>The address of the center</em>).</li><li>Học phí (<em>The tuition fee</em>).</li><li>Đội ngũ giáo viên (<em>The teachers</em>).</li><li>Chương trình đào tạo (<em>The training program</em>).</li></ul>',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc hỏi thông tin B1:</strong><ul><li>Hỏi trực tiếp &amp; gián tiếp xen kẽ: <code>Firstly, could you tell me...?</code> / <code>I’d like to know whether...</code></li><li>Nêu lý do hỏi ưu đãi: <code>Since I’m going to + V..., does the center offer any discounts?</code></li><li>Hỏi mô tả giáo viên: <code>could you tell me what the teachers are like?</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Chào John, hỏi thăm gia đình, chúc mừng bạn vừa hoàn thành khóa tiếng Anh tại Rainbow Language Center và nói mình cũng sắp học nên muốn hỏi thêm thông tin.',
+                    '<strong>2. Thân bài 1 — Địa chỉ &amp; Học phí (Ý 1 &amp; 2):</strong> Hỏi địa chỉ cụ thể của trung tâm (có gần khu trung tâm, dễ tìm không) và mức học phí, kèm câu hỏi về ưu đãi giảm giá khi đăng ký cùng bạn.',
+                    '<strong>3. Thân bài 2 — Giáo viên &amp; Chương trình đào tạo (Ý 3 &amp; 4):</strong> Hỏi xem giáo viên có thân thiện, kinh nghiệm và có giáo viên bản xứ không; cuối cùng hỏi thời lượng khóa học và lịch học hàng tuần.',
+                    '<strong>4. Kết thư &amp; Ký tên:</strong> Cảm ơn John đã hỗ trợ, hẹn sớm nhận thư trả lời và ký tên (<em>Best wishes,</em>).'
+                ],
+                vocab: [
+                    ['register', 'v.', 'đăng ký (khóa học)', 'Students must register before the end of this week.'],
+                    ['tuition fee', 'n. phr.', 'học phí', 'The tuition fee covers all course textbooks.'],
+                    ['offer discounts', 'v. phr.', 'cung cấp ưu đãi giảm giá', 'Many language schools offer discounts for early learners.'],
+                    ['native teachers', 'n. phr.', 'giáo viên bản xứ', 'Practicing with native teachers helps improve pronunciation.'],
+                    ['experienced', 'adj.', 'giàu kinh nghiệm', 'He is an experienced trainer in business communication.'],
+                    ['training program', 'n. phr.', 'chương trình đào tạo', 'The training program focuses on speaking and listening skills.'],
+                    ['class schedule', 'n. phr.', 'lịch học của lớp', 'Could you check the new class schedule on the board?'],
+                    ['last', 'v.', 'kéo dài (bao lâu)', 'Each workshop usually lasts around two hours.']
+                ],
+                tipTitle: 'Mẹo xử lý đề có 4 gạch đầu dòng',
+                tipText: 'Khi đề có 4 ý cần hỏi, đừng viết 4 đoạn rời rạc quá ngắn — hãy <strong>ghép theo cặp logic</strong> (Địa chỉ + Học phí thành đoạn 1; Giáo viên + Chương trình thành đoạn 2) để bài viết cân đối và mạch lạc.'
+            },
+            b2: {
+                titleEn: 'Rainbow Language Center Inquiry — Level B2',
+                titleVi: 'Gợi ý từ vựng nâng cao, cấu trúc tự nhiên và dàn ý trình độ B2',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Ở trình độ <strong>Level B2</strong>, bạn mở rộng câu hỏi bằng các tiêu chí thực tế hơn (đi lại bằng phương tiện công cộng, đăng ký theo cặp, trình độ chuyên môn của đội ngũ giảng dạy, sĩ số lớp và thời lượng khóa học) kết hợp từ vựng chuẩn xác (<em>teaching staff, well-qualified, sign up in pairs, course duration</em>).',
+                stepsHeader: 'Các điểm nâng cấp giúp bài viết đạt chuẩn Level B2:',
+                steps: [
+                    '1. <strong>Mở thư tự nhiên:</strong> Dùng <em>caught up, recently completed, in the near future, before making a decision</em>.',
+                    '2. <strong>Thân bài 1 (Địa chỉ &amp; Học phí):</strong> Hỏi thêm độ thuận tiện đi lại (<em>convenient to get there by public transport</em>) và ưu đãi đăng ký theo cặp (<em>sign up in pairs</em>).',
+                    '3. <strong>Thân bài 2 (Giáo viên &amp; Chương trình):</strong> Dùng cụm <em>curious about the teaching staff, supportive and well-qualified</em> và liệt kê rõ 3 khía cạnh của chương trình đào tạo (<em>course duration, class size, weekly schedule</em>).',
+                    '4. <strong>Kết thư tự nhiên:</strong> Cảm ơn vì đã dành thời gian và mong sớm nhận phản hồi.'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử thân mật hỏi thông tin chi tiết (Informal inquiry email).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> John (bạn thân); văn phong tự nhiên, mạch lạc, đa dạng mẫu câu hỏi.',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc ăn điểm Level B2:</strong><ul><li>Gộp 2 ý trong 1 câu hỏi gián tiếp: <code>could you let me know the exact address ... and whether it is convenient to...?</code></li><li>Mệnh đề quan hệ &amp; trạng ngữ lý do: <code>whether they provide any discounts for students who sign up in pairs, as a friend of mine...</code></li><li>Giới từ <em>including</em> mở rộng chi tiết: <code>share some details about the training program, including the course duration, class size, and weekly schedule?</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Hỏi thăm sau một thời gian chưa trò chuyện, nhắc trải nghiệm tuyệt vời của John ở Rainbow Language Center và bày tỏ mong muốn hỏi vài thông tin trước khi quyết định.',
+                    '<strong>2. Thân bài 1 — Địa chỉ &amp; Học phí (Ý 1 &amp; 2):</strong> Hỏi địa chỉ chính xác và việc di chuyển bằng phương tiện công cộng có tiện không; hỏi mức học phí và chính sách giảm giá khi đăng ký theo cặp.',
+                    '<strong>3. Thân bài 2 — Giáo viên &amp; Chương trình đào tạo (Ý 3 &amp; 4):</strong> Hỏi chất lượng đội ngũ giảng dạy (tận tâm, có bằng cấp chuyên môn, giáo viên bản xứ dạy kỹ năng nói không) và chi tiết chương trình (thời lượng, sĩ số, lịch học).',
+                    '<strong>4. Kết thư &amp; Ký tên:</strong> Cảm ơn thời gian của bạn, mong sớm nhận hồi âm và ký tên (<em>Best wishes,</em>).'
+                ],
+                vocab: [
+                    ['catch up', 'phr. v.', 'trò chuyện cập nhật tình hình', 'Let’s grab coffee this weekend so we can catch up.'],
+                    ['public transport', 'n. phr.', 'phương tiện công cộng', 'The new campus is easy to reach by public transport.'],
+                    ['sign up in pairs', 'v. phr.', 'đăng ký theo cặp (2 người)', 'Members get a 10% reduction when they sign up in pairs.'],
+                    ['teaching staff', 'n. phr.', 'đội ngũ giáo viên', 'The teaching staff at this academy are very approachable.'],
+                    ['well-qualified', 'adj.', 'có trình độ chuyên môn cao', 'All instructors here are well-qualified and certified.'],
+                    ['course duration', 'n. phr.', 'thời lượng khóa học', 'The website clearly states the course duration is eight weeks.'],
+                    ['class size', 'n. phr.', 'sĩ số lớp học', 'A small class size allows learners to practice speaking more.'],
+                    ['weekly schedule', 'n. phr.', 'lịch trình hàng tuần', 'I need to check my weekly schedule before joining the club.']
+                ],
+                upgrades: [
+                    ['Mở thư', 'finished an English course / before I register', '<strong>recently completed an English course</strong> / <strong>before making a decision</strong>'],
+                    ['Địa chỉ &amp; Học phí', 'near the city center / study with my friend', '<strong>convenient to get there by public transport</strong> / <strong>students who sign up in pairs</strong>'],
+                    ['Giáo viên', 'friendly and experienced', '<strong>teaching staff</strong> / <strong>supportive and well-qualified</strong>'],
+                    ['Chương trình', 'how long the course lasts and what the class schedule is like', '<strong>including the course duration, class size, and weekly schedule</strong>']
+                ],
+                tipTitle: 'Mẹo nâng band điểm từ B1 lên B2',
+                tipText: 'Thay vì hỏi liên tiếp 4–5 câu hỏi ngắn đơn lẻ, hãy dùng cấu trúc <strong>including A, B, and C</strong> hoặc nối 2 vế bằng <strong>and whether + S + V</strong> để câu văn trôi chảy và tăng rõ điểm Grammatical Range.'
+            }
+        },
+        '3': {
+            numLabel: 'Đề 3',
+            taskTitle: 'Write a formal inquiry email to the Course Director in London',
+            placeholder: 'Dear Sir or Madam,\n\nViết bài của bạn ở đây…',
+            promptEn: 'You want to attend a summer English course in London next month. Write an email to the course director at the school to ask for information. In your email, you should:',
+            promptVi: 'Bạn muốn tham gia một khóa học tiếng Anh mùa hè tại London vào tháng tới. Hãy viết một email cho giám đốc khóa học tại trường để hỏi thông tin. Trong email, bạn nên:',
+            bullets: [
+                {
+                    en: 'Ask about the exact dates of the courses and the class schedules',
+                    vi: 'Hỏi về ngày chính xác của các khóa học và lịch học trên lớp'
+                },
+                {
+                    en: 'Inquire about tuition fees and potential discounts',
+                    vi: 'Hỏi về học phí và các khoản giảm giá có thể có'
+                },
+                {
+                    en: 'Ask about accommodation options provided by the school',
+                    vi: 'Hỏi về các lựa chọn chỗ ở do nhà trường cung cấp'
+                }
+            ],
+            footerEn: 'Write at least 120 words. You do not need to include your name or addresses. Your response will be evaluated in terms of Task Fulfillment, Organization, Vocabulary and Grammar.',
+            footerVi: 'Viết ít nhất 120 từ. Bạn không cần ghi tên hoặc địa chỉ của mình. Bài viết của bạn sẽ được đánh giá dựa trên các tiêu chí: Mức độ hoàn thành yêu cầu đề bài (Task Fulfillment), Bố cục (Organization), Từ vựng (Vocabulary) và Ngữ pháp (Grammar).',
+            sampleB1: [
+                '<strong>Dear Sir/Madam,</strong>',
+                'I hope this email finds you well. I am interested in attending a summer English course at your school in London next month. Therefore, I am writing to ask for some information about the course before I register.',
+                'Firstly, could you tell me the exact dates of the course? I would also like to know the class schedule. For example, how many classes are there each week, and what time do they start and finish?',
+                'Secondly, I would like to ask about the tuition fees. How much does the course cost, and are there any discounts available for international students or for those who register early?',
+                'Finally, I would like to know more about the accommodation options provided by the school. Could you tell me what types of accommodation are available, how much they cost, and whether they are located near the school?',
+                'Thank you for taking the time to read my email. I look forward to receiving your reply as soon as possible.',
+                '<strong>Kind regards,</strong>'
+            ],
+            sampleB2: [
+                '<strong>Dear Sir or Madam,</strong>',
+                'I am writing to inquire about the summer English courses offered at your school in London next month. As I plan to improve my academic and communication skills during the summer break, I would greatly appreciate some further details before submitting my application.',
+                'First of all, could you please confirm the exact starting and ending dates of the upcoming courses, as well as the weekly timetable? It would be helpful to know how many hours of instruction are included each week and whether classes take place in the morning or afternoon.',
+                'Secondly, I would be grateful if you could provide information regarding the tuition fees and what is covered in the total cost. I would also like to inquire whether any discounts or scholarships are available for international students or early applicants.',
+                'Finally, could you let me know what accommodation options the school arranges, such as student residences or homestays? Please also advise on the weekly rent and the distance from the school.',
+                'Thank you very much for your assistance. I look forward to hearing from you at your earliest convenience.',
+                '<strong>Yours faithfully,</strong>'
+            ],
+            b1: {
+                titleEn: 'Summer English Course in London — Level B1 (Formal)',
+                titleVi: 'Gợi ý từ vựng, cấu trúc và dàn ý trình độ B1 (Văn phong trang trọng)',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Đây là đề <strong>Thư trang trọng (Formal Email)</strong> gửi Giám đốc khóa học (<em>Course Director</em>). Ở trình độ <strong>Level B1</strong>, bạn cần <strong>KHÔNG viết tắt</strong> (dùng <em>I am, I would like</em> thay vì <em>I’m, I’d</em>), chào trang trọng (<em>Dear Sir/Madam,</em>) và chia 3 đoạn thân bài ứng với 3 yêu cầu đề bài.',
+                stepsHeader: 'Bố cục bức thư trang trọng (Level B1) gồm 5 phần:',
+                steps: [
+                    '1. <strong>Mở thư:</strong> Chào <em>Dear Sir/Madam,</em>, chúc sức khỏe lịch sự và nêu rõ mục đích muốn tham gia khóa tiếng Anh mùa hè ở London nên viết thư hỏi thông tin.',
+                    '2. <strong>Đoạn 1 (Ngày học &amp; Lịch học):</strong> Hỏi ngày bắt đầu/kết thúc chính xác và lịch học (mỗi tuần mấy buổi, giờ bắt đầu và kết thúc).',
+                    '3. <strong>Đoạn 2 (Học phí &amp; Giảm giá):</strong> Hỏi mức học phí và các ưu đãi giảm giá cho sinh viên quốc tế hoặc người đăng ký sớm.',
+                    '4. <strong>Đoạn 3 (Chỗ ở):</strong> Hỏi các loại chỗ ở trường cung cấp, chi phí và có gần trường không.',
+                    '5. <strong>Kết thư:</strong> Cảm ơn đã dành thời gian đọc thư, mong sớm nhận phản hồi và chào trang trọng (<em>Kind regards, / Yours faithfully,</em>).'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử trang trọng hỏi thông tin khóa học (Formal inquiry email).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Giám đốc khóa học (không biết tên) → dùng <em>Dear Sir/Madam,</em> và kết bằng <em>Kind regards,</em> hoặc <em>Yours faithfully,</em>. Tuyệt đối <strong>không dùng dạng viết tắt</strong>.',
+                    '<strong>3 yêu cầu bắt buộc trong đề:</strong><ul><li>Ngày chính xác của các khóa học và lịch học (<em>exact dates and class schedules</em>).</li><li>Học phí và các khoản giảm giá có thể có (<em>tuition fees and potential discounts</em>).</li><li>Các lựa chọn chỗ ở do trường cung cấp (<em>accommodation options provided by the school</em>).</li></ul>',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc Formal B1:</strong><ul><li>Nêu mục đích: <code>I am interested in + V-ing... Therefore, I am writing to ask for...</code></li><li>Sắp xếp ý rõ ràng: <code>Firstly, could you tell me...?</code> / <code>Secondly, I would like to ask about...</code> / <code>Finally, I would like to know more about...</code></li><li>Kết thư chuẩn: <code>Thank you for taking the time to read my email. I look forward to receiving your reply...</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Chào <em>Dear Sir/Madam,</em>, giới thiệu ngắn mục đích quan tâm tới khóa tiếng Anh mùa hè tại London vào tháng tới và muốn hỏi thêm thông tin trước khi đăng ký.',
+                    '<strong>2. Thân bài 1 — Ngày học &amp; Lịch học (Ý 1):</strong> Hỏi ngày chính xác của khóa học, số buổi học mỗi tuần và khung giờ bắt đầu – kết thúc.',
+                    '<strong>3. Thân bài 2 — Học phí &amp; Giảm giá (Ý 2):</strong> Hỏi chi phí khóa học và xem có giảm giá cho học viên quốc tế hoặc đăng ký sớm không.',
+                    '<strong>4. Thân bài 3 — Lựa chọn chỗ ở (Ý 3):</strong> Hỏi nhà trường có những loại chỗ ở nào, giá bao nhiêu và có ở gần trường không.',
+                    '<strong>5. Kết thư &amp; Ký tên:</strong> Cảm ơn người nhận đã đọc thư, mong nhận hồi âm sớm và kết thúc trang trọng.'
+                ],
+                vocab: [
+                    ['attend a course', 'v. phr.', 'tham gia một khóa học', 'She plans to attend a design course in autumn.'],
+                    ['exact dates', 'n. phr.', 'ngày chính xác', 'Please check the exact dates on the university calendar.'],
+                    ['tuition fees', 'n. phr.', 'các khoản học phí', 'Tuition fees vary depending on the level of study.'],
+                    ['international students', 'n. phr.', 'sinh viên quốc tế', 'The college welcomes international students from twenty countries.'],
+                    ['register early', 'v. phr.', 'đăng ký sớm', 'Participants who register early receive free study materials.'],
+                    ['accommodation options', 'n. phr.', 'các lựa chọn chỗ ở', 'The booklet lists several accommodation options near the campus.'],
+                    ['be located near', 'v. phr.', 'nằm gần', 'The library is located near the main train station.'],
+                    ['look forward to + V-ing', 'v. phr.', 'mong đợi làm gì', 'I look forward to visiting your campus next spring.']
+                ],
+                tipTitle: 'Lưu ý vàng khi viết thư trang trọng (Formal Email)',
+                tipText: 'Khi gửi cho <em>Course Director / Manager</em> chưa biết tên, hãy kiểm tra kỹ 3 điểm: (1) chào <strong>Dear Sir/Madam,</strong>, (2) <strong>không viết tắt</strong> (<em>I am / I would</em> thay vì <em>I’m / I’d</em>), và (3) kết thư lịch sự (<strong>Kind regards,</strong> hoặc <strong>Yours faithfully,</strong>).'
+            },
+            b2: {
+                titleEn: 'Summer English Course in London — Level B2 (Formal)',
+                titleVi: 'Gợi ý từ vựng nâng cao, cấu trúc trang trọng và dàn ý trình độ B2',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Ở trình độ <strong>Level B2</strong>, thư trang trọng nổi bật nhờ các động từ và mẫu câu lịch sự chuẩn học thuật: <em>I am writing to inquire about, I would greatly appreciate, I would be grateful if you could provide information regarding, at your earliest convenience</em>, cùng từ vựng cụ thể như <em>hours of instruction, student residences, homestays, early applicants</em>.',
+                stepsHeader: 'Các điểm nâng cấp giúp bài viết đạt chuẩn Level B2:',
+                steps: [
+                    '1. <strong>Mở thư chuẩn Formal:</strong> Mở trực tiếp bằng <em>I am writing to inquire about...</em>, nêu ngắn lý do cá nhân và dùng <em>before submitting my application</em>.',
+                    '2. <strong>Đoạn 1 (Ngày &amp; Lịch học):</strong> Dùng <em>confirm the exact starting and ending dates</em>, <em>weekly timetable</em> và <em>hours of instruction</em>.',
+                    '3. <strong>Đoạn 2 (Học phí &amp; Ưu đãi):</strong> Dùng mẫu câu B2 <em>I would be grateful if you could provide information regarding...</em>, hỏi những gì đã bao gồm trong tổng phí và ưu đãi cho <em>early applicants</em>.',
+                    '4. <strong>Đoạn 3 (Chỗ ở):</strong> Đề cập cụ thể <em>student residences or homestays</em>, hỏi <em>weekly rent</em> và <em>distance from the school</em>.',
+                    '5. <strong>Kết thư chuẩn học thuật:</strong> <em>Thank you very much for your assistance. I look forward to hearing from you at your earliest convenience. / Yours faithfully,</em>'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử trang trọng hỏi thông tin khóa học (Formal inquiry email).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Giám đốc khóa học (<em>Dear Sir or Madam,</em> → <em>Yours faithfully,</em>); văn phong chuẩn mực, lịch sự, không viết tắt.',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc ăn điểm Level B2:</strong><ul><li>Mở đầu chuẩn Formal: <code>I am writing to inquire about + N...</code></li><li>Câu điều kiện lịch sự cao: <code>I would be grateful if you could provide information regarding + N...</code></li><li>Câu hỏi gián tiếp đa dạng: <code>It would be helpful to know how many ... and whether...</code> / <code>Please also advise on + N.</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Chào <em>Dear Sir or Madam,</em>, nêu thẳng mục đích hỏi thông tin khóa tiếng Anh mùa hè tại London để cải thiện kỹ năng học thuật &amp; giao tiếp trước khi nộp hồ sơ.',
+                    '<strong>2. Thân bài 1 — Ngày học &amp; Thời khóa biểu (Ý 1):</strong> Nhờ xác nhận ngày khai giảng – bế giảng, thời khóa biểu hàng tuần, số giờ học mỗi tuần và buổi học sáng hay chiều.',
+                    '<strong>3. Thân bài 2 — Học phí &amp; Giảm giá (Ý 2):</strong> Nhờ cung cấp thông tin học phí, các hạng mục đã bao gồm trong chi phí và các chính sách giảm giá hoặc học bổng cho sinh viên quốc tế / đăng ký sớm.',
+                    '<strong>4. Thân bài 3 — Chỗ ở (Ý 3):</strong> Hỏi các lựa chọn chỗ ở trường sắp xếp (ký túc xá sinh viên hay ở cùng gia đình bản xứ), giá thuê theo tuần và khoảng cách tới trường.',
+                    '<strong>5. Kết thư &amp; Ký tên:</strong> Cảm ơn sự hỗ trợ, mong nhận hồi âm vào thời gian thuận tiện nhất và kết bằng <em>Yours faithfully,</em>.'
+                ],
+                vocab: [
+                    ['inquire about', 'v. phr.', 'hỏi thông tin (trang trọng)', 'I am calling to inquire about the upcoming seminar dates.'],
+                    ['submit an application', 'v. phr.', 'nộp đơn đăng ký', 'Candidates should submit an application before May 15.'],
+                    ['weekly timetable', 'n. phr.', 'thời khóa biểu hàng tuần', 'New students receive their weekly timetable on orientation day.'],
+                    ['hours of instruction', 'n. phr.', 'số giờ giảng dạy', 'The intensive program offers twenty hours of instruction per week.'],
+                    ['early applicants', 'n. phr.', 'những người đăng ký sớm', 'Early applicants are given priority for workshop seats.'],
+                    ['student residences', 'n. phr.', 'ký túc xá sinh viên', 'Modern student residences usually include shared kitchens.'],
+                    ['homestay', 'n.', 'ở cùng gia đình bản xứ', 'Choosing a homestay lets learners experience local culture daily.'],
+                    ['at your earliest convenience', 'phr.', 'vào thời gian thuận tiện sớm nhất của ông/bà', 'Please send the updated invoice at your earliest convenience.']
+                ],
+                upgrades: [
+                    ['Mở thư', 'I am writing to ask for some information... before I register.', '<strong>I am writing to inquire about... before submitting my application.</strong>'],
+                    ['Lịch học', 'class schedule / how many classes are there each week', '<strong>weekly timetable</strong> / <strong>how many hours of instruction are included each week</strong>'],
+                    ['Học phí', 'I would like to ask about the tuition fees... those who register early', '<strong>I would be grateful if you could provide information regarding the tuition fees</strong> / <strong>early applicants</strong>'],
+                    ['Chỗ ở &amp; Kết thư', 'types of accommodation / as soon as possible / Kind regards,', '<strong>student residences or homestays</strong> / <strong>at your earliest convenience</strong> / <strong>Yours faithfully,</strong>']
+                ],
+                tipTitle: 'Mẹo nâng band điểm Formal Email lên B2',
+                tipText: 'Tránh dùng cụm <em>as soon as possible</em> (dễ tạo cảm giác thúc ép trong thư trang trọng) — hãy thay bằng <strong>at your earliest convenience</strong> và kết hợp cặp chuẩn Anh-Anh <strong>Dear Sir or Madam, → Yours faithfully,</strong>.'
+            }
+        },
+        '4': {
+            numLabel: 'Đề 4',
+            taskTitle: 'Write a formal inquiry email about the Soft Skills Course at Sunrise',
+            placeholder: 'Dear Sir or Madam,\n\nViết bài của bạn ở đây…',
+            promptEn: 'You saw an advertisement in the newspaper for a "Soft Skills Course" at Sunrise Education Center ("MASTER YOUR SOFT SKILLS — Are you looking to improve your communication and teamwork? Join our new course at Sunrise Education Center! For more details about fees, dates, and certificates, please contact us."). Write an email to the center to ask for information. In your email, you should:',
+            promptVi: 'Bạn đã thấy một quảng cáo trên báo về "Khóa học Kỹ năng mềm" tại Trung tâm Giáo dục Sunrise ("LÀM CHỦ KỸ NĂNG MỀM — Bạn muốn cải thiện kỹ năng giao tiếp và làm việc nhóm? Hãy tham gia khóa học mới tại Trung tâm Giáo dục Sunrise! Để biết thêm chi tiết về học phí, ngày học và chứng chỉ, vui lòng liên hệ với chúng tôi."). Hãy viết một email cho trung tâm để hỏi thông tin. Trong email, bạn nên:',
+            bullets: [
+                {
+                    en: 'Ask about the tuition fees and any available discounts',
+                    vi: 'Hỏi về học phí và các ưu đãi giảm giá hiện có'
+                },
+                {
+                    en: 'Ask about the starting dates and class schedule',
+                    vi: 'Hỏi về ngày khai giảng và lịch học của lớp'
+                },
+                {
+                    en: 'Ask about the certificate after finishing the course',
+                    vi: 'Hỏi về chứng chỉ sau khi hoàn thành khóa học'
+                }
+            ],
+            footerEn: 'Write at least 120 words. You do not need to include your name or addresses. Your response will be evaluated in terms of Task Fulfillment, Organization, Vocabulary and Grammar.',
+            footerVi: 'Viết ít nhất 120 từ. Bạn không cần ghi tên hoặc địa chỉ của mình. Bài viết của bạn sẽ được đánh giá dựa trên các tiêu chí: Mức độ hoàn thành yêu cầu đề bài (Task Fulfillment), Bố cục (Organization), Từ vựng (Vocabulary) và Ngữ pháp (Grammar).',
+            sampleB1: [
+                '<strong>Dear Sir/Madam,</strong>',
+                'I hope this email finds you well. Yesterday, I saw an advertisement about a soft skills course at Sunrise Education Center in a newspaper. Because I want to improve my communication and teamwork skills, I am writing to ask for some information about the course.',
+                'First of all, could you tell me the tuition fee of the course? Actually, I am planning to register with a friend of mine, so I would like to ask if the center offers any discounts for group registration.',
+                'Secondly, I would like to know when the course starts and what the class schedule is like. I am currently studying at university during the day, so I can only attend classes in the evening or at weekends.',
+                'Finally, after finishing the course, will I receive a certificate? I would also like to know whether I can use that certificate when applying for a job or submitting documents to my university.',
+                'Thank you for taking the time to read my email. I look forward to receiving your reply soon.',
+                '<strong>Kind regards,</strong>'
+            ],
+            sampleB2: [
+                '<strong>Dear Sir or Madam,</strong>',
+                'I am writing in response to your recent newspaper advertisement regarding the new Soft Skills Course at Sunrise Education Center. As a university student eager to strengthen my communication and teamwork abilities, I would like to request some additional details before enrolling.',
+                'Firstly, could you please inform me of the total tuition fee and whether course materials are included? Since a close friend of mine is also interested in joining, I would be grateful to know if your center offers any group or student discounts.',
+                'Secondly, I would like to inquire about the upcoming starting dates and the weekly schedule. Because I attend university lectures during the daytime, I would appreciate knowing whether evening or weekend classes are available.',
+                'Finally, could you clarify whether participants receive an official certificate upon completion of the course, and whether it is recognized by employers or universities for job and scholarship applications?',
+                'Thank you very much for your assistance. I look forward to hearing from you at your earliest convenience.',
+                '<strong>Yours faithfully,</strong>'
+            ],
+            b1: {
+                titleEn: 'Soft Skills Course Inquiry (Sunrise) — Level B1 (Formal)',
+                titleVi: 'Gợi ý từ vựng, cấu trúc và dàn ý trình độ B1 (Văn phong trang trọng)',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Với dạng đề dựa trên <strong>mẩu quảng cáo (Advertisement)</strong>, bước quan trọng đầu tiên là nhắc rõ nguồn bạn đọc quảng cáo (<em>saw an advertisement in a newspaper</em>) rồi hỏi đủ 3 ý được gợi ý trong quảng cáo: <strong>học phí (fees), ngày &amp; lịch học (dates/schedule), và chứng chỉ (certificates)</strong>.',
+                stepsHeader: 'Bố cục bức thư hỏi thông tin khóa kỹ năng mềm (Level B1) gồm 5 phần:',
+                steps: [
+                    '1. <strong>Mở thư:</strong> Chào trang trọng, nêu việc thấy quảng cáo khóa kỹ năng mềm của Sunrise Education Center trên báo và mục đích muốn cải thiện giao tiếp, làm việc nhóm.',
+                    '2. <strong>Đoạn 1 (Học phí &amp; Giảm giá):</strong> Hỏi mức học phí và hỏi xem đăng ký cùng bạn thì trung tâm có giảm giá theo nhóm không.',
+                    '3. <strong>Đoạn 2 (Ngày học &amp; Lịch học):</strong> Hỏi ngày khai giảng và lịch học; giải thích mình đang học đại học ban ngày nên chỉ học được buổi tối hoặc cuối tuần.',
+                    '4. <strong>Đoạn 3 (Chứng chỉ):</strong> Hỏi sau khi hoàn thành có được cấp chứng chỉ không và chứng chỉ đó có dùng để xin việc hay nộp cho trường được không.',
+                    '5. <strong>Kết thư:</strong> Cảm ơn đã đọc thư, mong sớm nhận phản hồi và chào trang trọng (<em>Kind regards,</em>).'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử trang trọng hỏi thông tin theo quảng cáo (Formal inquiry email responding to an ad).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Trung tâm Giáo dục Sunrise (<em>Dear Sir/Madam,</em> → <em>Kind regards,</em>); lịch sự, không dùng từ viết tắt.',
+                    '<strong>3 yêu cầu bắt buộc trong đề:</strong><ul><li>Hỏi về học phí và ưu đãi giảm giá (<em>fees and discounts</em>).</li><li>Hỏi về ngày khai giảng và lịch học (<em>dates and class schedule</em>).</li><li>Hỏi về chứng chỉ sau khi hoàn thành khóa học (<em>certificates</em>).</li></ul>',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc B1:</strong><ul><li>Dẫn nguồn quảng cáo: <code>Yesterday, I saw an advertisement about ... in a newspaper.</code></li><li>Nêu bối cảnh cá nhân trước khi hỏi: <code>I am currently studying at university during the day, so I can only attend...</code></li><li>Câu hỏi với <em>if / whether</em>: <code>I would like to ask if...</code> / <code>I would also like to know whether...</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Chào <em>Dear Sir/Madam,</em>, nhắc việc đọc quảng cáo khóa học Kỹ năng mềm tại Sunrise Education Center trên báo và nêu mục đích viết thư hỏi thêm thông tin.',
+                    '<strong>2. Thân bài 1 — Học phí &amp; Giảm giá (Ý 1):</strong> Hỏi học phí của khóa học và vì định đăng ký cùng một người bạn nên hỏi thêm trung tâm có ưu đãi giảm giá theo nhóm không.',
+                    '<strong>3. Thân bài 2 — Ngày khai giảng &amp; Lịch học (Ý 2):</strong> Hỏi khi nào khóa học bắt đầu và lịch học thế nào, kèm lưu ý bản thân bận học đại học ban ngày nên chỉ tham gia được buổi tối hoặc cuối tuần.',
+                    '<strong>4. Thân bài 3 — Chứng chỉ (Ý 3):</strong> Hỏi học xong có được cấp chứng chỉ không và chứng chỉ đó có thể dùng để ứng tuyển việc làm hoặc nộp cho trường đại học không.',
+                    '<strong>5. Kết thư &amp; Ký tên:</strong> Cảm ơn thời gian của người đọc, mong nhận hồi âm sớm và ký tên lịch sự.'
+                ],
+                vocab: [
+                    ['advertisement', 'n.', 'mẩu quảng cáo', 'I found a useful advertisement for a workshop online.'],
+                    ['soft skills', 'n. phr.', 'kỹ năng mềm', 'Employers value soft skills such as leadership and problem-solving.'],
+                    ['communication and teamwork', 'n. phr.', 'giao tiếp và làm việc nhóm', 'Group projects help students develop communication and teamwork.'],
+                    ['group registration', 'n. phr.', 'đăng ký theo nhóm', 'The conference offers lower rates for group registration.'],
+                    ['during the day', 'prep. phr.', 'vào ban ngày', 'He works at a clinic during the day and studies at night.'],
+                    ['attend classes', 'v. phr.', 'tham gia các buổi học', 'Working adults often attend classes after 6 p.m.'],
+                    ['certificate', 'n.', 'chứng chỉ', 'Every graduate receives a signed certificate on the final day.'],
+                    ['apply for a job', 'v. phr.', 'nộp đơn xin việc', 'She updated her CV before applying for a job in marketing.']
+                ],
+                tipTitle: 'Mẹo mở rộng ý khi đề là một mẩu quảng cáo ngắn',
+                tipText: 'Quảng cáo chỉ nêu 3 từ khóa ngắn (<em>fees, dates, certificates</em>). Để bài viết tự nhiên và đủ độ dài, hãy thêm <strong>1 câu bối cảnh thực tế</strong> vào mỗi ý (ví dụ: đi học cùng bạn → hỏi giảm giá; bận học đại học ban ngày → hỏi lớp buổi tối; muốn xin việc → hỏi giá trị chứng chỉ).'
+            },
+            b2: {
+                titleEn: 'Soft Skills Course Inquiry (Sunrise) — Level B2 (Formal)',
+                titleVi: 'Gợi ý từ vựng nâng cao, cấu trúc trang trọng và dàn ý trình độ B2',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Ở trình độ <strong>Level B2</strong>, bài viết mở đầu chuyên nghiệp bằng <em>I am writing in response to your recent newspaper advertisement regarding...</em> và dùng hệ thống động từ trang trọng đa dạng (<em>request additional details, inform me of, inquire about, clarify whether</em>) kèm collocations học thuật (<em>enroll, course materials, official certificate upon completion, recognized by employers</em>).',
+                stepsHeader: 'Các điểm nâng cấp giúp bài viết đạt chuẩn Level B2:',
+                steps: [
+                    '1. <strong>Mở thư chuẩn Formal hồi đáp quảng cáo:</strong> Dùng <em>in response to your recent newspaper advertisement regarding...</em>, <em>eager to strengthen</em> và <em>before enrolling</em>.',
+                    '2. <strong>Đoạn 1 (Học phí &amp; Giảm giá):</strong> Hỏi thêm xem học phí đã bao gồm <em>course materials</em> chưa và trung tâm có <em>group or student discounts</em> không.',
+                    '3. <strong>Đoạn 2 (Ngày &amp; Lịch học):</strong> Dùng <em>upcoming starting dates</em>, <em>attend university lectures during the daytime</em> và <em>would appreciate knowing whether evening or weekend classes are available</em>.',
+                    '4. <strong>Đoạn 3 (Chứng chỉ):</strong> Dùng động từ <em>clarify whether</em>, cụm <em>an official certificate upon completion</em> và <em>recognized by employers or universities</em>.',
+                    '5. <strong>Kết thư trang trọng:</strong> <em>Thank you very much for your assistance. I look forward to hearing from you at your earliest convenience. / Yours faithfully,</em>'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử trang trọng phản hồi quảng cáo để hỏi thông tin (Formal inquiry email).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Trung tâm Giáo dục Sunrise (<em>Dear Sir or Madam,</em> → <em>Yours faithfully,</em>); chuẩn mực, trôi chảy, không viết tắt.',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc ăn điểm Level B2:</strong><ul><li>Mở thư phản hồi quảng cáo: <code>I am writing in response to your recent newspaper advertisement regarding...</code></li><li>Đa dạng động từ yêu cầu thông tin: <code>could you please inform me of...</code> / <code>I would appreciate knowing whether...</code> / <code>could you clarify whether...</code></li><li>Cụm giới từ học thuật: <code>upon completion of the course</code> / <code>recognized by employers or universities</code>.</li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Chào <em>Dear Sir or Madam,</em>, viết thư phản hồi quảng cáo trên báo về khóa Kỹ năng mềm của Sunrise Education Center với tư cách sinh viên đại học muốn nâng cao kỹ năng trước khi ghi danh.',
+                    '<strong>2. Thân bài 1 — Học phí &amp; Ưu đãi (Ý 1):</strong> Hỏi tổng học phí có bao gồm tài liệu học chưa và trung tâm có ưu đãi giảm giá nhóm hoặc sinh viên không vì có người bạn thân muốn học cùng.',
+                    '<strong>3. Thân bài 2 — Ngày khai giảng &amp; Lịch học (Ý 2):</strong> Hỏi các ngày khai giảng sắp tới và lịch học hàng tuần; nêu rõ lịch học đại học ban ngày nên muốn biết có lớp buổi tối hoặc cuối tuần không.',
+                    '<strong>4. Thân bài 3 — Chứng chỉ (Ý 3):</strong> Nhờ làm rõ học viên có nhận được chứng chỉ chính thức khi hoàn thành khóa học không và chứng chỉ đó có được nhà tuyển dụng hay trường đại học công nhận không.',
+                    '<strong>5. Kết thư &amp; Ký tên:</strong> Cảm ơn sự hỗ trợ, mong nhận hồi âm sớm và ký tên <em>Yours faithfully,</em>.'
+                ],
+                vocab: [
+                    ['in response to', 'prep. phr.', 'để phản hồi lại', 'We are writing in response to your email from Monday.'],
+                    ['enroll', 'v.', 'ghi danh, đăng ký học', 'Over fifty learners decided to enroll in the summer seminar.'],
+                    ['course materials', 'n. phr.', 'tài liệu học tập của khóa học', 'Digital course materials are uploaded every Friday afternoon.'],
+                    ['student discounts', 'n. phr.', 'ưu đãi giảm giá cho sinh viên', 'Local museums often provide student discounts with a valid ID.'],
+                    ['attend lectures', 'v. phr.', 'tham dự các buổi giảng đại học', 'First-year undergraduates attend lectures from Monday to Friday.'],
+                    ['clarify', 'v.', 'làm rõ, xác nhận rõ', 'Could you clarify the deadline for submitting the final report?'],
+                    ['upon completion of', 'prep. phr.', 'ngay khi hoàn thành', 'Trainees receive a progress summary upon completion of the module.'],
+                    ['recognized by employers', 'adj. phr.', 'được các nhà tuyển dụng công nhận', 'A degree from this institute is widely recognized by employers.']
+                ],
+                upgrades: [
+                    ['Mở thư', 'Yesterday, I saw an advertisement about... ask for some information', '<strong>I am writing in response to your recent newspaper advertisement regarding... request some additional details before enrolling</strong>'],
+                    ['Học phí', 'could you tell me the tuition fee... offers any discounts', '<strong>could you please inform me of the total tuition fee and whether course materials are included</strong> / <strong>group or student discounts</strong>'],
+                    ['Lịch học', 'studying at university during the day / only attend in the evening', '<strong>attend university lectures during the daytime</strong> / <strong>would appreciate knowing whether evening or weekend classes are available</strong>'],
+                    ['Chứng chỉ', 'after finishing the course, will I receive a certificate?', '<strong>could you clarify whether participants receive an official certificate upon completion of the course, and whether it is recognized by employers...</strong>']
+                ],
+                tipTitle: 'Mẹo đa dạng hóa động từ hỏi thông tin ở Level B2',
+                tipText: 'Thay vì lặp lại <em>Could you tell me</em> và <em>I would like to know</em> ở cả 3 đoạn, hãy xoay vòng 3 động từ chuẩn Formal: <strong>inform me of</strong> (đoạn 1), <strong>inquire about / appreciate knowing</strong> (đoạn 2), và <strong>clarify whether</strong> (đoạn 3).'
+            }
+        }
+    };
+
+    function getInquiryStorageKey(promptId) {
+        return getUserScopedKey(`vstep_inquiry_draft_prompt_${promptId}`);
+    }
+
+    function getInquirySubmittedKey(promptId) {
+        return getUserScopedKey(`vstep_inquiry_submitted_prompt_${promptId}`);
+    }
+
+    function getInquiryLessonId(promptId) {
+        return `inquiry-${String(promptId || currentInquiryPromptId)}`;
+    }
+
+    function updateInquiryHeaderTag() {
+        const pData = INQUIRY_PROMPTS_DATA[currentInquiryPromptId];
+        if (inquiryCurrentLevelTag && pData) {
+            inquiryCurrentLevelTag.textContent = ` · ${pData.numLabel} · Level ${currentInquiryLevel}`;
+        }
+    }
+
+    // 16b.1 Level B1 / Level B2 Switcher
+    inquiryLevelBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const level = btn.getAttribute('data-inquiry-level');
+            currentInquiryLevel = level === 'B2' ? 'B2' : 'B1';
+            inquiryLevelBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            if (currentInquiryLevel === 'B2') {
+                if (inquiryGuideB1) inquiryGuideB1.style.display = 'none';
+                if (inquiryGuideB2) inquiryGuideB2.style.display = 'flex';
+            } else {
+                if (inquiryGuideB1) inquiryGuideB1.style.display = 'flex';
+                if (inquiryGuideB2) inquiryGuideB2.style.display = 'none';
+            }
+
+            updateInquiryHeaderTag();
+
+            if (inquiryTheoryScrollPane) {
+                inquiryTheoryScrollPane.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+    });
+
+    // 16b.2 Draggable Split-Screen Resizer
+    if (inquiryResizer && inquiryWorkspace) {
+        let isDraggingInquirySplit = false;
+
+        inquiryResizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isDraggingInquirySplit = true;
+            inquiryResizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDraggingInquirySplit) return;
+            const rect = inquiryWorkspace.getBoundingClientRect();
+            if (rect.width <= 0) return;
+            let pct = ((e.clientX - rect.left) / rect.width) * 100;
+            pct = Math.max(30, Math.min(70, pct));
+            inquiryWorkspace.style.setProperty('--left-pane-width', `${pct.toFixed(1)}%`);
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (!isDraggingInquirySplit) return;
+            isDraggingInquirySplit = false;
+            inquiryResizer.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        });
+    }
+
+    // 16b.3 Toggle Prompt Translation
+    if (inquiryTogglePromptTransBtn && inquiryPromptCard) {
+        inquiryTogglePromptTransBtn.addEventListener('click', () => {
+            const isShown = inquiryPromptCard.classList.toggle('show-vi');
+            inquiryTogglePromptTransBtn.classList.toggle('active', isShown);
+            const span = inquiryTogglePromptTransBtn.querySelector('span');
+            if (span) {
+                span.textContent = isShown ? 'Ẩn dịch đề' : 'Dịch đề bài';
+            }
+        });
+    }
+
+    // 16b.4 Countdown Timer (20:00)
+    if (inquiryTimerBtn && inquiryTimerDisplay) {
+        let inquiryRemainingSec = 20 * 60;
+        let inquiryTimerInterval = null;
+
+        const renderInquiryTimer = () => {
+            const m = Math.floor(inquiryRemainingSec / 60).toString().padStart(2, '0');
+            const s = (inquiryRemainingSec % 60).toString().padStart(2, '0');
+            inquiryTimerDisplay.textContent = `${m}:${s}`;
+        };
+
+        inquiryTimerBtn.addEventListener('click', () => {
+            if (inquiryTimerInterval) {
+                clearInterval(inquiryTimerInterval);
+                inquiryTimerInterval = null;
+                inquiryTimerBtn.classList.remove('running');
+                return;
+            }
+            if (inquiryRemainingSec <= 0) {
+                inquiryRemainingSec = 20 * 60;
+            }
+            inquiryTimerBtn.classList.add('running');
+            inquiryTimerInterval = setInterval(() => {
+                if (inquiryRemainingSec > 0) {
+                    inquiryRemainingSec--;
+                    renderInquiryTimer();
+                    if (inquiryRemainingSec <= 120) {
+                        inquiryTimerBtn.classList.remove('running');
+                        inquiryTimerBtn.classList.add('warning');
+                    }
+                } else {
+                    clearInterval(inquiryTimerInterval);
+                    inquiryTimerInterval = null;
+                    inquiryTimerDisplay.textContent = 'Hết giờ!';
+                }
+            }, 1000);
+        });
+    }
+
+    // 16b.5 Word Counter, Prompt Switcher (4 Đề), LocalStorage Draft, Cloud Submit & Sample Comparison
+    function getInquiryMinWords() {
+        return parseInt((inquiryTextarea && inquiryTextarea.getAttribute('data-min-words')) || '120', 10);
+    }
+
+    function checkStoredInquirySubmitted(promptId, draftText) {
+        const minW = getInquiryMinWords();
+        if (countWordsClean(draftText) < minW) return false;
+        try {
+            return localStorage.getItem(getInquirySubmittedKey(promptId)) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function populateInquirySamples(promptId, allowShow) {
+        const pData = INQUIRY_PROMPTS_DATA[promptId];
+        if (!allowShow || !pData) {
+            if (inquiryFbSampleB1) inquiryFbSampleB1.innerHTML = '';
+            if (inquiryFbSampleB2) inquiryFbSampleB2.innerHTML = '';
+            return;
+        }
+        if (inquiryFbSampleB1) {
+            inquiryFbSampleB1.innerHTML = pData.sampleB1.map(p => `<p>${p}</p>`).join('');
+        }
+        if (inquiryFbSampleB2) {
+            inquiryFbSampleB2.innerHTML = pData.sampleB2.map(p => `<p>${p}</p>`).join('');
+        }
+    }
+
+    function syncInquirySampleUI(revealSample = false) {
+        if (!isCurrentInquirySubmitted) {
+            populateInquirySamples(currentInquiryPromptId, false);
+            if (inquiryFeedbackBox) {
+                inquiryFeedbackBox.style.display = 'none';
+            }
+            if (inquiryPeekSampleBtn) {
+                inquiryPeekSampleBtn.disabled = true;
+                inquiryPeekSampleBtn.classList.add('locked');
+                inquiryPeekSampleBtn.innerHTML = '<i class="fas fa-lock"></i> Xem bài mẫu';
+                inquiryPeekSampleBtn.title = 'Hãy viết đủ 120 từ và bấm Nộp bài để mở khóa bài mẫu';
+            }
+            if (inquirySubmitBtn && !authState.isSubmittingInquiry) {
+                inquirySubmitBtn.textContent = 'Nộp bài';
+            }
+            return;
+        }
+
+        populateInquirySamples(currentInquiryPromptId, true);
+        const wc = countWordsClean(inquiryTextarea ? inquiryTextarea.value : '');
+        if (inquiryFeedbackTitle) {
+            inquiryFeedbackTitle.textContent = `✓ Đã nộp bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`;
+        }
+        if (inquiryFeedbackBox) {
+            inquiryFeedbackBox.style.display = revealSample ? 'block' : 'none';
+        }
+        if (inquiryPeekSampleBtn) {
+            inquiryPeekSampleBtn.disabled = false;
+            inquiryPeekSampleBtn.classList.remove('locked');
+            inquiryPeekSampleBtn.innerHTML = revealSample
+                ? '<i class="fas fa-eye-slash"></i> Ẩn bài mẫu'
+                : '<i class="fas fa-eye"></i> Xem bài mẫu';
+            inquiryPeekSampleBtn.title = 'Ẩn / Hiện bài mẫu đối chiếu';
+        }
+        if (inquirySubmitBtn && !authState.isSubmittingInquiry) {
+            inquirySubmitBtn.textContent = 'Nộp lại';
+        }
+    }
+
+    function updateInquiryWordState() {
+        if (!inquiryTextarea) return;
+        const minW = getInquiryMinWords();
+        const wc = countWordsClean(inquiryTextarea.value);
+        const needed = Math.max(0, minW - wc);
+        const canSubmit = wc >= minW;
+        const cloudSub = getCloudSubmission(getInquiryLessonId(currentInquiryPromptId));
+
+        if (inquiryWcEl) {
+            inquiryWcEl.textContent = `${wc} từ`;
+        }
+        if (inquiryStatusEl) {
+            if (cloudSub && cloudSub.is_submitted) {
+                inquiryStatusEl.textContent = canSubmit
+                    ? `✓ Đã nộp cho Giáo viên (${wc} từ) · Đã mở khóa bài mẫu`
+                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp bản sửa mới`;
+            } else if (isCurrentInquirySubmitted) {
+                inquiryStatusEl.textContent = canSubmit
+                    ? `✓ Đã nộp (${wc} từ) · Đã mở khóa bài mẫu`
+                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp lại`;
+            } else {
+                inquiryStatusEl.textContent = canSubmit
+                    ? `${wc}/${minW} từ · Đủ điều kiện — bấm Nộp bài để gửi Giáo viên & xem bài mẫu`
+                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp & xem bài mẫu`;
+            }
+            inquiryStatusEl.classList.toggle('ready', canSubmit || isCurrentInquirySubmitted || Boolean(cloudSub && cloudSub.is_submitted));
+        }
+        if (inquirySubmitBtn) {
+            inquirySubmitBtn.disabled = !canSubmit || authState.isSubmittingInquiry;
+            inquirySubmitBtn.classList.toggle('unanswered', !canSubmit);
+        }
+    }
+
+    function selectInquiryPrompt(promptId, options = {}) {
+        const { skipScroll = false } = options;
+        const pData = INQUIRY_PROMPTS_DATA[promptId];
+        if (!pData) return;
+        currentInquiryPromptId = String(promptId);
+
+        if (inquiryPromptSelect) {
+            inquiryPromptSelect.value = currentInquiryPromptId;
+        }
+        inquiryPromptNumBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.getAttribute('data-inquiry-prompt') === currentInquiryPromptId);
+        });
+
+        if (inquiryGuideB1) {
+            inquiryGuideB1.innerHTML = buildLevelGuideHtml('B1', pData.b1);
+        }
+        if (inquiryGuideB2) {
+            inquiryGuideB2.innerHTML = buildLevelGuideHtml('B2', pData.b2);
+        }
+
+        if (inquiryExNumPill) {
+            inquiryExNumPill.textContent = pData.numLabel;
+        }
+        if (inquiryExTitle) {
+            inquiryExTitle.textContent = pData.taskTitle;
+        }
+        if (inquiryPromptCard) {
+            inquiryPromptCard.innerHTML = `
+                <p class="draft-prompt-para">${pData.promptEn}</p>
+                <p class="draft-prompt-vi">${pData.promptVi}</p>
+                <ul class="draft-prompt-bullets">
+                    ${pData.bullets.map(b => `
+                        <li>
+                            <span>${b.en}</span>
+                            <span class="draft-prompt-vi">${b.vi}</span>
+                        </li>
+                    `).join('')}
+                </ul>
+                <p class="draft-prompt-footer-note">${pData.footerEn}</p>
+                <p class="draft-prompt-vi">${pData.footerVi}</p>
+            `;
+        }
+
+        const cloudSub = getCloudSubmission(getInquiryLessonId(currentInquiryPromptId));
+        let saved = '';
+        if (inquiryTextarea) {
+            inquiryTextarea.placeholder = pData.placeholder;
+            try {
+                saved = localStorage.getItem(getInquiryStorageKey(currentInquiryPromptId)) || '';
+            } catch (e) {}
+            if (!saved && cloudSub && cloudSub.content) {
+                saved = cloudSub.content;
+            }
+            inquiryTextarea.value = saved;
+        }
+
+        isCurrentInquirySubmitted = Boolean(cloudSub && cloudSub.is_submitted) || checkStoredInquirySubmitted(currentInquiryPromptId, saved);
+        syncInquirySampleUI(false);
+        renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, cloudSub);
+        updateInquiryWordState();
+        updateInquiryHeaderTag();
+
+        if (!skipScroll) {
+            if (inquiryTheoryScrollPane) {
+                inquiryTheoryScrollPane.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+            const exScrollPane = document.getElementById('inquiry-exercises-scroll-pane');
+            if (exScrollPane) {
+                exScrollPane.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+    }
+
+    if (inquiryPromptSelect) {
+        inquiryPromptSelect.addEventListener('change', (e) => {
+            selectInquiryPrompt(e.target.value);
+        });
+    }
+
+    inquiryPromptNumBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectInquiryPrompt(btn.getAttribute('data-inquiry-prompt'));
+        });
+    });
+
+    if (inquiryTextarea) {
+        inquiryTextarea.addEventListener('input', () => {
+            updateInquiryWordState();
+            try {
+                localStorage.setItem(getInquiryStorageKey(currentInquiryPromptId), inquiryTextarea.value);
+            } catch (e) {}
+        });
+    }
+
+    if (inquirySubmitBtn && inquiryFeedbackBox) {
+        inquirySubmitBtn.addEventListener('click', async () => {
+            const minW = getInquiryMinWords();
+            const content = inquiryTextarea ? inquiryTextarea.value.trim() : '';
+            const wc = countWordsClean(content);
+            if (wc < minW || authState.isSubmittingInquiry) return;
+
+            const pData = INQUIRY_PROMPTS_DATA[currentInquiryPromptId];
+            const lessonId = getInquiryLessonId(currentInquiryPromptId);
+            const lessonTitle = getCatalogLessonTitle(
+                lessonId,
+                pData ? `Task 01 · Hỏi thông tin ${currentInquiryPromptId}: ${pData.taskTitle}` : lessonId
+            );
+            const promptText = pData
+                ? `${pData.promptEn}\n${(pData.bullets || []).map(b => `- ${b.en}`).join('\n')}`
+                : '';
+
+            authState.isSubmittingInquiry = true;
+            inquirySubmitBtn.disabled = true;
+            inquirySubmitBtn.textContent = 'Đang nộp...';
+
+            const res = await submitWritingToCloud({
+                taskType: 'task1',
+                lessonId,
+                lessonTitle,
+                promptText,
+                content,
+                wordCount: wc,
+                targetLevel: currentInquiryLevel
+            });
+
+            authState.isSubmittingInquiry = false;
+
+            if (!res.ok) {
+                inquirySubmitBtn.disabled = false;
+                inquirySubmitBtn.textContent = isCurrentInquirySubmitted ? 'Nộp lại' : 'Nộp bài';
+                if (inquiryStatusEl) {
+                    inquiryStatusEl.textContent = `⚠️ Lỗi gửi bài lên Giáo viên: ${res.error}`;
+                    inquiryStatusEl.classList.remove('ready');
+                }
+                return;
+            }
+
+            isCurrentInquirySubmitted = true;
+            try {
+                localStorage.setItem(getInquirySubmittedKey(currentInquiryPromptId), '1');
+            } catch (e) {}
+            syncInquirySampleUI(true);
+            renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, res.row);
+            updateInquiryWordState();
+            if (inquiryTeacherFeedbackBox && inquiryTeacherFeedbackBox.style.display !== 'none') {
+                inquiryTeacherFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                inquiryFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
+    }
+
+    if (inquiryPeekSampleBtn && inquiryFeedbackBox) {
+        inquiryPeekSampleBtn.addEventListener('click', () => {
+            if (!isCurrentInquirySubmitted) return;
+            const isHidden = inquiryFeedbackBox.style.display === 'none' || inquiryFeedbackBox.style.display === '';
+            syncInquirySampleUI(isHidden);
+            if (isHidden) {
+                inquiryFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
+    }
+
+    if (inquiryResetBtn && inquiryTextarea) {
+        inquiryResetBtn.addEventListener('click', () => {
+            if (inquiryTextarea.value.trim().length > 0) {
+                if (!confirm('Bạn có chắc muốn xoá nội dung đang viết để viết lại từ đầu?')) {
+                    return;
+                }
+            }
+            inquiryTextarea.value = '';
+            const cloudSub = getCloudSubmission(getInquiryLessonId(currentInquiryPromptId));
+            isCurrentInquirySubmitted = Boolean(cloudSub && cloudSub.is_submitted);
+            try {
+                localStorage.removeItem(getInquiryStorageKey(currentInquiryPromptId));
+                localStorage.removeItem(getInquirySubmittedKey(currentInquiryPromptId));
+            } catch (e) {}
+            syncInquirySampleUI(false);
+            updateInquiryWordState();
+            inquiryTextarea.focus();
+        });
+    }
+
+    inquiryFbTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const lv = tab.getAttribute('data-inquiry-fb-level');
+            inquiryFbTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            if (lv === 'B2') {
+                if (inquiryFbSampleB1) inquiryFbSampleB1.style.display = 'none';
+                if (inquiryFbSampleB2) inquiryFbSampleB2.style.display = 'block';
+            } else {
+                if (inquiryFbSampleB1) inquiryFbSampleB1.style.display = 'block';
+                if (inquiryFbSampleB2) inquiryFbSampleB2.style.display = 'none';
+            }
+        });
+    });
+
+    // Populate initial Inquiry Prompt 1 (Concert Ticket — Alex) immediately on load
+    selectInquiryPrompt('1', { skipScroll: true });
+
     // --- 17. Task 2 Essay Writing Workspace (#viet-luan) — Multi-Topic ---
     const essayWorkspace = document.getElementById('essay-split-workspace');
     const essayResizer = document.getElementById('essay-split-resizer');
@@ -2584,6 +3552,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     adviceTeacherFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
             }, 120);
+        } else if (lessonId.startsWith('inquiry-')) {
+            const promptNum = lessonId.replace('inquiry-', '');
+            selectInquiryPrompt(promptNum);
+            navigateToView('hoi-thong-tin');
+            setTimeout(() => {
+                if (inquiryTeacherFeedbackBox && inquiryTeacherFeedbackBox.style.display !== 'none') {
+                    inquiryTeacherFeedbackBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 120);
         } else if (ESSAY_TOPICS[lessonId]) {
             selectEssayTopic(lessonId);
             navigateToView('viet-luan');
@@ -2695,6 +3672,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderNotificationBell();
                 renderMySubmissionsView();
                 renderTeacherFeedbackBox(adviceTeacherFeedbackBox, getCloudSubmission(getAdviceLessonId(currentAdvicePromptId)));
+                renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, getCloudSubmission(getInquiryLessonId(currentInquiryPromptId)));
                 renderTeacherFeedbackBox(essayTeacherFeedbackBox, getCloudSubmission(currentEssayTopic));
             }
         } catch (e) {}
@@ -2864,6 +3842,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function hydrateWritingViewsFromCloud() {
         selectAdvicePrompt(currentAdvicePromptId, { skipScroll: true });
+        selectInquiryPrompt(currentInquiryPromptId, { skipScroll: true });
         selectEssayTopic(currentEssayTopic, { skipResetTimer: true, skipScroll: true });
         renderMySubmissionsView();
     }
@@ -2894,8 +3873,10 @@ document.addEventListener('DOMContentLoaded', () => {
         authState.authInfo = '';
         authState.authLoading = false;
         if (adviceTextarea) adviceTextarea.value = '';
+        if (inquiryTextarea) inquiryTextarea.value = '';
         if (essayTextarea) essayTextarea.value = '';
         renderTeacherFeedbackBox(adviceTeacherFeedbackBox, null);
+        renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, null);
         renderTeacherFeedbackBox(essayTeacherFeedbackBox, null);
         navigateToView('home-dashboard');
         renderAuthGate();

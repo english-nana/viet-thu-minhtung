@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3.2">
+    <link rel="stylesheet" href="style.css?v=3.3">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -99,7 +99,7 @@
                 <div class="vs-sb-progress-card">
                     <div class="vs-sb-progress-top">
                         <span>Tiến độ nộp bài</span>
-                        <strong id="sb-progress-ratio">0/14</strong>
+                        <strong id="sb-progress-ratio">0/18</strong>
                     </div>
                     <div class="vs-sb-progress-track">
                         <div class="vs-sb-progress-fill" id="sb-progress-fill" style="width: 0%;"></div>
@@ -302,14 +302,14 @@
                             <button type="button" class="nb-unit-card" data-open-view="hoi-thong-tin">
                                 <div class="nb-card-top">
                                     <span class="nb-unit-num">03</span>
-                                    <span class="nb-status-badge">B1 – B2</span>
+                                    <span class="nb-status-badge status-ready">4 đề thực hành</span>
                                 </div>
                                 <h3 class="nb-card-title">Letter of Request / Inquiry</h3>
                                 <div class="nb-card-vi">Thư hỏi thông tin</div>
-                                <p class="nb-card-desc">3 đề: viết thư hỏi thông tin về khóa học tại Rainbow Language Center, khóa học tiếng Anh mùa hè và khóa học kỹ năng mềm.</p>
+                                <p class="nb-card-desc">4 đề: hỏi thông tin vé xem hòa nhạc (Alex), khóa học tại Rainbow Language Center, khóa tiếng Anh mùa hè ở London và khóa kỹ năng mềm.</p>
                                 <div class="nb-card-footer">
                                     <div class="nb-card-meta">
-                                        <span><i class="far fa-file-alt"></i> 3 đề mẫu</span>
+                                        <span><i class="far fa-file-alt"></i> 4 đề B1/B2</span>
                                         <span><i class="far fa-clock"></i> 20 phút</span>
                                     </div>
                                     <span class="nb-card-cta">Vào học <i class="fas fa-arrow-right"></i></span>
@@ -1726,274 +1726,133 @@
 
                 <!-- ==================== TAB 3: THƯ HỎI THÔNG TIN ==================== -->
                 <div class="tab-content" id="hoi-thong-tin">
+                    <div class="draft-lesson-view">
+                        <!-- PARALLEL 2-PANE SPLIT WORKSPACE (LEFT: GỢI Ý B1/B2, RIGHT: ĐỀ BÀI & VIẾT BÀI) -->
+                        <div class="draft-split-workspace" id="inquiry-split-workspace" style="--left-pane-width: 50%;">
 
-                    <!-- Cấu trúc câu -->
-                    <section class="card structures-section">
-                        <h2 class="section-title" style="color: black; text-transform: uppercase;">Cấu Trúc Câu Quan Trọng</h2>
-                        <div class="structure-grid">
-                            <!-- Hỏi thông tin -->
-                            <div class="structure-box">
-                                <h3>Các cấu trúc hỏi thông tin</h3>
-                                <ul class="structure-list">
-                                    <li>
-                                        <div class="structure-formula">Can; Could you tell me / let me know / provide me + <span class="text-red">N</span>?</div>
-                                        <div class="interactive-phrase" data-vi="Cuối cùng, bạn có thể cho tôi biết thêm về chương trình đào tạo không?"><span style="color: #0f172a;">Finally, can you tell me more about</span> <span class="text-red">the training program?</span></div>
-                                        <div class="interactive-phrase" data-vi="Bạn có thể cho tôi biết địa chỉ cụ thể của trung tâm không?"><span style="color: #0f172a;">Could you tell me</span> <span class="text-red">the specific address of the center?</span></div>
-                                        <div class="interactive-phrase" data-vi="Bạn có thể cho tôi biết chính xác thời gian và địa điểm tổ chức bữa tiệc không?"><span style="color: #0f172a;">Could you let me know exactly</span> <span class="text-red">when and where the party will take place?</span></div>
-                                        <div class="interactive-phrase" data-vi="Bạn có thể cung cấp cho tôi một số thông tin về giáo viên ở đó không?"><span style="color: #0f172a;">Can you provide me with</span> <span class="text-red">some information about the teacher there?</span></div>
-                                    </li>
-                                    <li>
-                                        <div class="structure-formula">I would like to know more about + <span class="text-red">N</span></div>
-                                        <div class="interactive-phrase" data-vi="Tôi muốn biết thêm về lịch học."><span style="color: #0f172a;">I would like to know more about</span> <span class="text-red">the class schedule.</span></div>
-                                    </li>
-                                    <li>
-                                        <div class="structure-formula">I would like to know whether + <span class="text-red">mệnh đề</span></div>
-                                        <div class="interactive-phrase" data-vi="Tôi định đăng ký cùng với nhóm bạn của mình, vì vậy tôi muốn biết liệu trung tâm có ưu đãi đặc biệt nào không."><span style="color: #0f172a;">I’m going to register with my group of friends, so I would like to know whether</span> <span class="text-red">the center has any special offers.</span></div>
-                                    </li>
-                                    <li>
-                                        <div class="structure-formula">I wonder if + <span class="text-red">mệnh đề</span></div>
-                                        <div class="interactive-phrase" data-vi="Tôi định đăng ký cùng bạn bè, nên tôi tự hỏi liệu trung tâm có giảm giá nào không."><span style="color: #0f172a;">I’m going to register with my friends, so I wonder if</span> <span class="text-red">the center offers any discounts.</span></div>
-                                    </li>
-                                </ul>
-                            </div>
+                            <!-- ==================== NỬA BÊN TRÁI: GỢI Ý VIẾT BÀI (LEVEL B1 & LEVEL B2) ==================== -->
+                            <section class="draft-split-pane draft-pane-left" aria-label="Gợi ý viết bài">
+                                <div class="draft-pane-sticky-header">
+                                    <div class="draft-pane-header-left">
+                                        <select class="draft-prompt-select" id="inquiry-prompt-select" aria-label="Chọn đề thư hỏi thông tin">
+                                            <option value="1">Đề 1: Hỏi thông tin vé hòa nhạc (Alex)</option>
+                                            <option value="2">Đề 2: Khóa học tại Rainbow Language Center (John)</option>
+                                            <option value="3">Đề 3: Khóa tiếng Anh mùa hè ở London (Formal)</option>
+                                            <option value="4">Đề 4: Khóa học kỹ năng mềm — Sunrise (Formal)</option>
+                                        </select>
+                                    </div>
+                                    <div class="draft-level-pills-group" role="tablist" aria-label="Chọn trình độ gợi ý">
+                                        <button type="button" class="draft-level-btn active" data-inquiry-level="B1">Level B1</button>
+                                        <button type="button" class="draft-level-btn" data-inquiry-level="B2">Level B2</button>
+                                    </div>
+                                </div>
+
+                                <div class="draft-pane-scroll-body" id="inquiry-theory-scroll-pane">
+                                    <div class="draft-pane-inner-container">
+                                        <!-- ================= LEVEL B1 GUIDE ================= -->
+                                        <section id="inquiry-guide-B1" class="draft-theory-part-section"></section>
+
+                                        <!-- ================= LEVEL B2 GUIDE ================= -->
+                                        <section id="inquiry-guide-B2" class="draft-theory-part-section" style="display: none;"></section>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <!-- ==================== THANH KÉO CHỈNH ĐỘ RỘNG 2 CỘT ==================== -->
+                            <div class="draft-split-resizer" id="inquiry-split-resizer" title="Kéo để thay đổi độ rộng Gợi ý / Viết bài"></div>
+
+                            <!-- ==================== NỬA BÊN PHẢI: ĐỀ BÀI & GIAO DIỆN VIẾT BÀI ==================== -->
+                            <section class="draft-split-pane draft-pane-right" aria-label="Đề bài và Viết bài">
+                                <div class="draft-pane-sticky-header">
+                                    <div class="draft-pane-header-title">
+                                        <strong>Thực hành viết</strong>
+                                        <span style="color:#71717A;" id="inquiry-current-level-tag"> · Đề 1 · Level B1</span>
+                                    </div>
+                                    <div class="draft-pane-header-actions">
+                                        <div class="draft-prompt-num-pills" role="tablist" aria-label="Chuyển nhanh giữa 4 đề">
+                                            <button type="button" class="draft-prompt-num-btn active" data-inquiry-prompt="1" title="Đề 1: Hỏi thông tin vé hòa nhạc (Alex)">1</button>
+                                            <button type="button" class="draft-prompt-num-btn" data-inquiry-prompt="2" title="Đề 2: Khóa học tại Rainbow Language Center (John)">2</button>
+                                            <button type="button" class="draft-prompt-num-btn" data-inquiry-prompt="3" title="Đề 3: Khóa tiếng Anh mùa hè ở London (Formal)">3</button>
+                                            <button type="button" class="draft-prompt-num-btn" data-inquiry-prompt="4" title="Đề 4: Khóa học kỹ năng mềm — Sunrise (Formal)">4</button>
+                                        </div>
+                                        <button type="button" class="draft-timer-pill" id="inquiry-timer-btn" title="Bấm để bắt đầu / tạm dừng đếm ngược 20 phút">
+                                            <i class="far fa-clock"></i> <span id="inquiry-timer-display">20:00</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="draft-pane-scroll-body" id="inquiry-exercises-scroll-pane">
+                                    <div class="draft-pane-inner-container">
+                                        <article class="draft-exercise-card" id="inquiry-exercise-card">
+                                            <header class="draft-exercise-card-header">
+                                                <div class="draft-exercise-head-left">
+                                                    <span class="draft-exercise-num-pill" id="inquiry-ex-num-pill">Đề 1</span>
+                                                    <div>
+                                                        <h3 class="draft-exercise-title" id="inquiry-ex-title">Write an inquiry email to Alex about a concert ticket</h3>
+                                                        <div class="draft-exercise-instruction">Read the prompt below carefully and write an email of at least 120 words.</div>
+                                                    </div>
+                                                </div>
+                                                <button type="button" class="draft-exercise-part-tag" id="inquiry-toggle-prompt-trans-btn" title="Hiện / Ẩn dịch nghĩa tiếng Việt của đề bài">
+                                                    <i class="fas fa-language"></i>
+                                                    <span>Dịch đề bài</span>
+                                                </button>
+                                            </header>
+
+                                            <div class="draft-exercise-card-body">
+                                                <div class="draft-writing-prompt-card" id="inquiry-prompt-card"></div>
+
+                                                <div style="margin-top:14px;">
+                                                    <textarea
+                                                        id="inquiry-writing-textarea"
+                                                        rows="12"
+                                                        maxlength="10000"
+                                                        spellcheck="false"
+                                                        placeholder="Dear Alex,&#10;&#10;Viết bài của bạn ở đây…"
+                                                        class="draft-writing-textarea"
+                                                        data-min-words="120"
+                                                    ></textarea>
+                                                    <p class="draft-writing-counter-row">
+                                                        <span class="draft-writing-word-num" id="inquiry-writing-wc">0 từ</span>
+                                                        <span>Yêu cầu tối thiểu 120 từ</span>
+                                                    </p>
+                                                </div>
+
+                                                <div class="writing-teacher-feedback-box" id="inquiry-teacher-feedback-box" style="display: none;"></div>
+
+                                                <div class="draft-writing-feedback-box" id="inquiry-writing-feedback" style="display: none;">
+                                                    <div class="draft-feedback-top">
+                                                        <div class="draft-feedback-status-title" id="inquiry-feedback-title">✓ Đã nộp bài viết! Đối chiếu với bài mẫu chuẩn:</div>
+                                                        <div class="draft-feedback-level-switch">
+                                                            <button type="button" class="draft-fb-tab active" data-inquiry-fb-level="B1">Bài mẫu Level B1</button>
+                                                            <button type="button" class="draft-fb-tab" data-inquiry-fb-level="B2">Bài mẫu Level B2</button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="draft-feedback-sample-text" id="inquiry-fb-sample-B1"></div>
+                                                    <div class="draft-feedback-sample-text" id="inquiry-fb-sample-B2" style="display: none;"></div>
+                                                </div>
+                                            </div>
+
+                                            <footer class="draft-exercise-card-footer">
+                                                <span class="draft-writing-status-text" id="inquiry-writing-status">
+                                                    0/120 từ · cần thêm 120 từ để nộp &amp; xem bài mẫu
+                                                </span>
+                                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                                    <button type="button" class="draft-mini-btn" id="inquiry-reset-btn">Viết lại</button>
+                                                    <button type="button" class="draft-mini-btn locked" id="inquiry-peek-sample-btn" disabled title="Hãy viết đủ 120 từ và bấm Nộp bài để mở khóa bài mẫu">
+                                                        <i class="fas fa-lock"></i> Xem bài mẫu
+                                                    </button>
+                                                    <button type="button" class="draft-submit-btn unanswered" id="inquiry-submit-btn" disabled>
+                                                        Nộp bài
+                                                    </button>
+                                                </div>
+                                            </footer>
+                                        </article>
+                                    </div>
+                                </div>
+                            </section>
+
                         </div>
-                    </section>
-                    <!-- Mock Exam Window -->
-                    <section class="card mock-exam-section">
-                        <h2 class="section-title prompt-header-inline">
-                            <span>DANH SÁCH ĐỀ</span>
-                            <select class="prompt-dropdown">
-                                <option value="hoi-thong-tin-2">Khóa học tại Rainbow Language Center</option>
-                                <option value="hoi-thong-tin-1">Khóa học tiếng Anh mùa hè</option>
-                                <option value="hoi-thong-tin-3">Khóa học kỹ năng mềm</option>
-                            </select>
-                        </h2>
-                        <div class="collapsible-content">
-                            <div class="prompt-tabs-container">
-
-                                <!-- ĐỀ SỐ 2: Rainbow Language Center -->
-                                <div class="prompt-content active" id="hoi-thong-tin-2">
-                                    <div class="mock-exam-window">
-                                        <div class="mock-header">
-                                            <div class="mock-timer">20:00</div>
-                                            <div class="mock-status"></div>
-                                        </div>
-                                        <div class="mock-content">
-                                            <div class="font-size-controls"><button class="font-btn highlight-toggle-btn" onclick="toggleHighlightMode()"><i class="fas fa-highlighter"></i> Bút nhớ: Tắt</button>
-                                                <button class="font-btn" onclick="changePromptFontSize(-1)">-</button>
-                                                <button class="font-btn default-btn" onclick="resetPromptFontSize()">Mặc định</button>
-                                                <button class="font-btn" onclick="changePromptFontSize(1)">+</button>
-                                            </div>
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn nên dành khoảng 20 phút cho phần thi này."><em>You should spend about <strong>20 minutes</strong> on this task.</em></span></p>
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Đọc tình huống dưới đây.">Read the situation below.</span></p>
-                                            
-                                            <div class="mock-email-quote">
-                                                <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn của bạn vừa hoàn thành một khóa học tiếng Anh tại Trung tâm Ngoại ngữ Rainbow và đã có một trải nghiệm tuyệt vời.">Your friend has just completed an English course at Rainbow Language Center and had a great experience.</span> <span class="interactive-phrase prompt-sentence" data-vi="Bạn cũng đang có dự định học tiếng Anh và muốn biết thêm thông tin về khóa học này.">You are planning to study English as well and would like to know more about the course.</span></p>
-                                                <p><span class="interactive-phrase prompt-sentence" data-vi="Trong email của bạn, bạn nên hỏi về:">In your email, you should ask about:</span></p>
-                                                <ul>
-                                                    <li><span class="interactive-phrase prompt-sentence" data-vi="Địa chỉ của trung tâm">The address of the center</span></li>
-                                                    <li><span class="interactive-phrase prompt-sentence" data-vi="Học phí">The tuition fee</span></li>
-                                                    <li><span class="interactive-phrase prompt-sentence" data-vi="Các giáo viên">The teachers</span></li>
-                                                    <li><span class="interactive-phrase prompt-sentence" data-vi="Chương trình đào tạo">The training program</span></li>
-                                                </ul>
-                                            </div>
-
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Viết một bức thư cho bạn của bạn để hỏi thêm thông tin về khóa học.">Write a letter to your friend asking for more information about the course.</span></p>
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn nên viết ít nhất 120 từ."><em>You should write at least 120 words.</em></span> <span class="interactive-phrase prompt-sentence" data-vi="Không bao gồm tên hoặc địa chỉ của bạn."><em>Do not include your name or address.</em></span></p>
-                                        </div>
-                                    </div>
-                                    <div class="sample-essay-section">
-                                        <div class="sample-essay-header">
-                                            <button class="toggle-essay-btn" onclick="toggleSampleEssay(this)">
-                                                <i class="fas fa-eye"></i> Hiện bài mẫu
-                                            </button>
-                                            <div class="essay-font-controls">
-                                                <button class="essay-font-btn" onclick="changeEssayFontSize(-1)">-</button>
-                                                <button class="essay-font-btn default-btn" onclick="resetEssayFontSize()">Mặc định</button>
-                                                <button class="essay-font-btn" onclick="changeEssayFontSize(1)">+</button>
-                                            </div>
-                                        </div>
-                                        <div class="sample-essay-content" style="display: none; line-height: 1.8; color: #0f172a;">
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="John thân mến,">Dear John,</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Dạo này cậu thế nào rồi?">How have you been lately?</span> <span class="interactive-phrase prompt-sentence" data-vi="Đã lâu rồi chúng ta không gặp nhau.">We haven’t seen each other for a long time.</span> <span class="interactive-phrase prompt-sentence" data-vi="Mình hy vọng mọi việc đều tốt đẹp với cậu và gia đình.">I hope everything goes well with you and your family.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Mình nghe nói cậu vừa hoàn thành một khóa học tiếng Anh tại Trung tâm Tiếng Anh River và thực sự rất thích nó.">I heard that you’ve just finished an English course at River English Center and really enjoyed it.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Mình cũng đang lên kế hoạch học tiếng Anh sớm.">I’m also planning to study English soon.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Vì vậy, mình viết thư này để hỏi một số thông tin về khóa học trước khi đăng ký.">Therefore, I’m writing to ask for some information about the course before I register.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Đầu tiên, cậu có thể cho mình biết địa chỉ của trung tâm không?">Firstly, could you tell me the address of the center?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Mình muốn biết liệu nó có gần trung tâm thành phố và dễ tìm không.">I would like to know whether it is near the city center and easy to find.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Ngoài ra, học phí là bao nhiêu thế?">Also, how much is the tuition fee?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Vì mình sẽ học cùng với bạn của mình, trung tâm có ưu đãi giảm giá nào không?">Since I will study with my friend, will the center offer any discounts?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Hơn nữa, mình tự hỏi liệu cậu có thể cho mình biết giáo viên ở đó thế nào không.">Moreover, I wonder if you could tell me how the teachers are.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Họ có thân thiện và giàu kinh nghiệm không?">Are they friendly and experienced?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Có giáo viên bản xứ nào không?">Are there any native teachers?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Cuối cùng, cậu có thể cho mình biết thêm về chương trình đào tạo không?">Finally, can you tell me more about the training program?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Khóa học kéo dài trong bao lâu?">How long does the course last?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Lịch học của lớp như thế nào?">What is the class schedule?</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Cảm ơn cậu rất nhiều vì sự giúp đỡ.">Thanks a lot for your help.</span> <span class="interactive-phrase prompt-sentence" data-vi="Mình rất mong sớm nhận được phản hồi từ cậu.">I’m looking forward to hearing from you soon.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Chúc mọi điều tốt lành,">Best wishes,</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- ĐỀ SỐ 1: Summer English Course -->
-                                <div class="prompt-content" id="hoi-thong-tin-1">
-                                    <div class="mock-exam-window">
-                                        <div class="mock-header">
-                                            <div class="mock-timer">20:00</div>
-                                            <div class="mock-status"></div>
-                                        </div>
-                                        <div class="mock-content">
-                                            <div class="font-size-controls"><button class="font-btn highlight-toggle-btn" onclick="toggleHighlightMode()"><i class="fas fa-highlighter"></i> Bút nhớ: Tắt</button>
-                                                <button class="font-btn" onclick="changePromptFontSize(-1)">-</button>
-                                                <button class="font-btn default-btn" onclick="resetPromptFontSize()">Mặc định</button>
-                                                <button class="font-btn" onclick="changePromptFontSize(1)">+</button>
-                                            </div>
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn nên dành khoảng 20 phút cho phần thi này."><em>You should spend about <strong>20 minutes</strong> on this task.</em></span></p>
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Đọc tình huống dưới đây.">Read the situation below.</span></p>
-                                            
-                                            <div class="mock-email-quote">
-                                                <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn muốn tham gia một khóa học tiếng Anh mùa hè ở London vào tháng tới.">You want to attend a summer English course in London next month.</span> <span class="interactive-phrase prompt-sentence" data-vi="Viết một email cho giám đốc khóa học tại trường để hỏi thông tin.">Write an email to the course director at the school to ask for information.</span></p>
-                                                <p><span class="interactive-phrase prompt-sentence" data-vi="Trong email của bạn, bạn nên:">In your email, you should:</span></p>
-                                                <ul>
-                                                    <li><span class="interactive-phrase prompt-sentence" data-vi="Hỏi về ngày chính xác của các khóa học và lịch học">Ask about the exact dates of the courses and the class schedules</span></li>
-                                                    <li><span class="interactive-phrase prompt-sentence" data-vi="Hỏi về học phí và các khoản giảm giá có thể có">Inquire about tuition fees and potential discounts</span></li>
-                                                    <li><span class="interactive-phrase prompt-sentence" data-vi="Hỏi về các lựa chọn chỗ ở do trường cung cấp">Ask about accommodation options provided by the school</span></li>
-                                                </ul>
-                                            </div>
-
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Viết một email cho giám đốc khóa học yêu cầu các chi tiết này.">Write an email to the course director asking for these details.</span></p>
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn nên viết ít nhất 120 từ."><em>You should write at least 120 words.</em></span> <span class="interactive-phrase prompt-sentence" data-vi="Không bao gồm tên hoặc địa chỉ của bạn."><em>Do not include your name or address.</em></span></p>
-                                        </div>
-                                    </div>
-                                    <div class="sample-essay-section">
-                                        <div class="sample-essay-header">
-                                            <button class="toggle-essay-btn" onclick="toggleSampleEssay(this)">
-                                                <i class="fas fa-eye"></i> Hiện bài mẫu
-                                            </button>
-                                            <div class="essay-font-controls">
-                                                <button class="essay-font-btn" onclick="changeEssayFontSize(-1)">-</button>
-                                                <button class="essay-font-btn default-btn" onclick="resetEssayFontSize()">Mặc định</button>
-                                                <button class="essay-font-btn" onclick="changeEssayFontSize(1)">+</button>
-                                            </div>
-                                        </div>
-                                        <div class="sample-essay-content" style="display: none; line-height: 1.8; color: #0f172a;">
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Kính gửi Ông/Bà,">Dear Sir/Madam,</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Hy vọng thư này sẽ đến tay ông/bà trong tình trạng tốt đẹp.">I hope this email finds you well.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Tôi là học sinh tại trường của ông/bà.">I am a student in your school.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Tôi rất quan tâm đến việc tham gia một khóa học tiếng Anh mùa hè ở London vào tháng tới.">I am interested in attending a summer English course in London next month.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Vì thế, tôi viết thư này để hỏi thêm thông tin về khóa học trước khi đăng ký.">Therefore, I am writing to ask for some information about the course before I register.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Đầu tiên, ông/bà có thể cho tôi biết ngày chính xác của khóa học được không?">Firstly, could you tell me the exact dates of the course?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Tôi cũng muốn biết về lịch học của lớp.">I would also like to know the class schedule.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Ví dụ như, có bao nhiêu buổi học mỗi tuần, và chúng bắt đầu và kết thúc lúc mấy giờ?">For example, how many classes are there each week, and what time do they start and finish?</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Thứ hai, tôi muốn hỏi về học phí.">Secondly, I would like to ask about the tuition fees.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Khóa học có học phí bao nhiêu?">How much does the course cost?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Có ưu đãi giảm giá nào dành cho sinh viên quốc tế hoặc những người đăng ký sớm không?">Are there any discounts available for international students or for those who register early?</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Cuối cùng, tôi muốn biết thêm về các lựa chọn chỗ ở do trường cung cấp.">Finally, I would like to know more about the accommodation options provided by the school.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Ông/bà có thể cho tôi biết có những loại chỗ ở nào sẵn có không?">Could you tell me what types of accommodation are available?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Tôi cũng muốn biết chi phí là bao nhiêu và liệu chúng có nằm gần trường không?">I would also like to know how much they cost and whether they are located near the school.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Cảm ơn ông/bà đã dành thời gian đọc thư của tôi.">Thank you for taking the time to read my email.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Tôi rất mong nhận được phản hồi từ ông/bà trong thời gian sớm nhất.">I look forward to receiving your reply as soon as possible.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Trân trọng,">Kind regards,</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- ĐỀ SỐ 3: Soft Skills Course -->
-                                <div class="prompt-content" id="hoi-thong-tin-3">
-                                    <div class="mock-exam-window">
-                                        <div class="mock-header">
-                                            <div class="mock-timer">20:00</div>
-                                            <div class="mock-status"></div>
-                                        </div>
-                                        <div class="mock-content">
-                                            <div class="font-size-controls"><button class="font-btn highlight-toggle-btn" onclick="toggleHighlightMode()"><i class="fas fa-highlighter"></i> Bút nhớ: Tắt</button>
-                                                <button class="font-btn" onclick="changePromptFontSize(-1)">-</button>
-                                                <button class="font-btn default-btn" onclick="resetPromptFontSize()">Mặc định</button>
-                                                <button class="font-btn" onclick="changePromptFontSize(1)">+</button>
-                                            </div>
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn nên dành khoảng 20 phút cho phần thi này."><em>You should spend about <strong>20 minutes</strong> on this task.</em></span></p>
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn đã xem một quảng cáo cho 'Khóa học Kỹ năng mềm' trên báo.">You saw an advertisement for a "Soft Skills Course" in the newspaper.</span> <span class="interactive-phrase prompt-sentence" data-vi="Đọc quảng cáo dưới đây.">Read the advertisement below.</span></p>
-                                            
-                                            <div class="mock-email-quote">
-                                                <p><strong>MASTER YOUR SOFT SKILLS</strong></p>
-                                                <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn đang tìm cách cải thiện kỹ năng giao tiếp và làm việc nhóm?">Are you looking to improve your communication and teamwork?</span> <span class="interactive-phrase prompt-sentence" data-vi="Hãy tham gia khóa học mới của chúng tôi tại Trung tâm Giáo dục Sunrise!">Join our new course at Sunrise Education Center!</span> <span class="interactive-phrase prompt-sentence" data-vi="Để biết thêm chi tiết về học phí, ngày học và chứng chỉ, vui lòng liên hệ với chúng tôi.">For more details about fees, dates, and certificates, please contact us.</span></p>
-                                            </div>
-
-                                            <p><span class="interactive-phrase prompt-sentence" data-vi="Bạn nên viết ít nhất 120 từ."><em>You should write at least 120 words.</em></span> <span class="interactive-phrase prompt-sentence" data-vi="Không bao gồm tên hoặc địa chỉ của bạn."><em>Do not include your name or address.</em></span></p>
-                                        </div>
-                                    </div>
-                                    <div class="sample-essay-section">
-                                        <div class="sample-essay-header">
-                                            <button class="toggle-essay-btn" onclick="toggleSampleEssay(this)">
-                                                <i class="fas fa-eye"></i> Hiện bài mẫu
-                                            </button>
-                                            <div class="essay-font-controls">
-                                                <button class="essay-font-btn" onclick="changeEssayFontSize(-1)">-</button>
-                                                <button class="essay-font-btn default-btn" onclick="resetEssayFontSize()">Mặc định</button>
-                                                <button class="essay-font-btn" onclick="changeEssayFontSize(1)">+</button>
-                                            </div>
-                                        </div>
-                                        <div class="sample-essay-content" style="display: none; line-height: 1.8; color: #0f172a;">
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Kính gửi Ông/Bà,">Dear Sir/Madam,</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Tôi hy vọng thư này sẽ đến tay ông/bà trong tình trạng tốt đẹp.">I hope this letter finds you well.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Hôm qua, tôi có thấy một quảng cáo về khóa học kỹ năng mềm trên báo.">Yesterday, I saw an advertisement about a soft skills course in a newspaper.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Vì vậy, tôi viết thư này để hỏi một số thông tin về khóa học.">Therefore, I am writing to ask for some information about it.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Trước hết, ông/bà có thể cho tôi biết học phí của khóa học được không?">First of all, could you tell me the tuition fee of the course?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Học phí có đắt không?">Is it expensive?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Thực ra, tôi đang có kế hoạch đăng ký học cùng với một người bạn của mình, vì vậy tôi muốn hỏi xem trung tâm có chính sách ưu đãi giảm giá nào không.">Actually, I am planning to register with a friend of mine, so I would like to ask if the center could offer any discounts.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Thứ hai, tôi muốn biết khi nào khóa học bắt đầu và lịch trình học như thế nào.">Secondly, I would like to know when the course starts and what the schedule is like.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Hiện tại tôi đang học đại học vào ban ngày, vì vậy tôi chỉ có thể tham gia khóa học vào buổi tối.">I am currently studying at university during the day, so I can only attend the course in the evening.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Cuối cùng, sau khi hoàn thành khóa học, tôi có nhận được chứng chỉ nào không?">Finally, after finishing the course, will I receive any certificate?</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Và tôi có thể sử dụng chứng chỉ đó để nộp đơn xin việc hoặc nộp cho trường học của tôi không?">And can I use that certificate to apply for a job or submit to my school?</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Cảm ơn ông/bà đã dành thời gian đọc thư của tôi.">Thank you for taking the time to read my email.</span>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Tôi rất mong sớm nhận được phản hồi từ ông/bà.">I look forward to receiving your reply as soon as possible.</span>
-                                            </p>
-                                            <p>
-                                                <span class="interactive-phrase prompt-sentence" data-vi="Trân trọng,">Kind regards,</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+                    </div>
                 </div>
 
                 <!-- ==================== TAB 4: THƯ CUNG CẤP THÔNG TIN ==================== -->
@@ -8481,8 +8340,8 @@
         </div>
     </div>
 
-    <script src="supabase-config.js?v=3.5"></script>
-    <script src="supabase-client.js?v=3.5"></script>
-    <script src="script.js?v=3.5"></script>
+    <script src="supabase-config.js?v=3.6"></script>
+    <script src="supabase-client.js?v=3.6"></script>
+    <script src="script.js?v=3.6"></script>
 </body>
 </html>
