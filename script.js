@@ -502,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const QUICK_SEARCH_CATALOG = [
         { title: 'Lý thuyết chung: Viết Thư & Email', sub: 'Task 01 · Bố cục 3 phần, văn phong Formal/Informal', tag: 'Task 01', view: 'ly-thuyet' },
         { title: 'Thư khuyên / đề xuất (5 đề)', sub: 'Mua hàng online (Jay), Hội thảo (Carol), Du lịch Hà Nội, Chuyển nhà, Mùa hè', tag: 'Task 01', view: 'khuyen-nghi' },
-        { title: 'Thư hỏi thông tin (3 đề)', sub: 'Vé xem hòa nhạc (Alex), mua thú cưng (Local Pet Shop), tổ chức tiệc sinh nhật (Sarah)', tag: 'Task 01', view: 'hoi-thong-tin' },
+        { title: 'Thư hỏi thông tin (4 đề)', sub: 'Vé xem hòa nhạc (Alex), mua thú cưng (Pet Shop), tiệc sinh nhật (Sarah), khóa tiếng Anh mùa hè (London)', tag: 'Task 01', view: 'hoi-thong-tin' },
         { title: 'Thư cung cấp thông tin (6 đề)', sub: 'Quê hương (John), Hoa (Emily), tiệc chào mừng, chuyến đi, thể thao, tuyển dụng', tag: 'Task 01', view: 'cung-cap-thong-tin' },
         { title: 'Thư phàn nàn (4 đề)', sub: 'Phòng thay đồ, thiết bị nhà bếp hỏng, đơn hàng Shopee, nhà hàng', tag: 'Task 01', view: 'phan-nan' },
         { title: 'Thư cho đánh giá / phản hồi (3 đề)', sub: 'Khách sạn, nhà sách, đánh giá sách cho Mia', tag: 'Task 01', view: 'danh-gia' },
@@ -2193,7 +2193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- 16b. Thư Hỏi Thông Tin (#hoi-thong-tin) — Split-Screen Workspace (3 Đề) ---
+    // --- 16b. Thư Hỏi Thông Tin (#hoi-thong-tin) — Split-Screen Workspace (4 Đề) ---
     const inquiryWorkspace = document.getElementById('inquiry-split-workspace');
     const inquiryResizer = document.getElementById('inquiry-split-resizer');
     const inquiryLevelBtns = document.querySelectorAll('[data-inquiry-level]');
@@ -2586,6 +2586,129 @@ document.addEventListener('DOMContentLoaded', () => {
                 tipTitle: 'Mẹo nâng band điểm từ B1 lên B2',
                 tipText: 'Thay vì chỉ hỏi <em>Should I...?</em>, hãy dùng cặp câu hỏi giả định <strong>Would [A] be comfortable enough, or would [B] be more convenient?</strong> kết hợp cấu trúc <strong>I’d rather ask for... so nobody feels they have to...</strong> để câu văn tự nhiên và đạt điểm cao tiêu chí Grammar &amp; Vocabulary.'
             }
+        },
+        '4': {
+            numLabel: 'Đề 4',
+            taskTitle: 'Write a formal inquiry email to the Course Director in London',
+            placeholder: 'Dear Sir/Madam,\n\nViết bài của bạn ở đây…',
+            promptEn: 'You want to attend a summer English course in London next month. Write an email to the course director at the school to ask for information. In your email, you should:',
+            promptVi: 'Bạn muốn tham gia một khóa học tiếng Anh mùa hè tại London vào tháng tới. Hãy viết một email cho giám đốc khóa học tại trường để hỏi thông tin. Trong email, bạn nên:',
+            bullets: [
+                {
+                    en: 'Ask about the exact dates of the courses and the class schedules',
+                    vi: 'Hỏi về ngày chính xác của các khóa học và lịch học trên lớp'
+                },
+                {
+                    en: 'Inquire about tuition fees and potential discounts',
+                    vi: 'Hỏi về học phí và các khoản giảm giá có thể có'
+                },
+                {
+                    en: 'Ask about accommodation options provided by the school',
+                    vi: 'Hỏi về các lựa chọn chỗ ở do nhà trường cung cấp'
+                }
+            ],
+            footerEn: 'Write an email to the course director asking for these details. You should write at least 120 words. Do not include your name or address.',
+            footerVi: 'Viết một email cho giám đốc khóa học để hỏi những chi tiết này. Bạn nên viết ít nhất 120 từ. Không ghi tên hoặc địa chỉ của bạn.',
+            sampleB1: [
+                '<strong>Dear Sir/Madam,</strong>',
+                'I am writing to ask for some information about the summer English course at your school next month. I am interested in joining the course because I want to improve my English and practise speaking with other students.',
+                'Could you tell me the exact dates of the course and the class schedule? I would also like to know how many hours students study each day and whether classes are held in the morning or afternoon.',
+                'In addition, could you let me know how much the course costs? Are there any discounts for students who register early?',
+                'Finally, I would like to ask about accommodation. Does your school provide a place to stay, such as a student residence or a room with a local family? Could you also tell me how much it costs?',
+                'Thank you for your help. I look forward to hearing from you.',
+                '<strong>Kind regards,</strong>'
+            ],
+            sampleB2: [
+                '<strong>Dear Sir/Madam,</strong>',
+                'I am writing to ask for some information about the summer English course at your school next month. I am interested in joining the programme because I would like to improve my speaking skills and become more confident when using English in everyday situations.',
+                'Could you tell me the exact starting and finishing dates of the course, as well as the class schedule? I would also like to know how many hours of lessons students have each day and whether classes are held in the morning or afternoon.',
+                'In addition, could you let me know the tuition fees and whether any discounts are available for early registration or international students? Finally, I would appreciate some information about the accommodation options provided by the school. Are there student residences or host families, and how much do they cost?',
+                'Thank you for your time. I look forward to hearing from you.',
+                '<strong>Kind regards,</strong>'
+            ],
+            b1: {
+                titleEn: 'Summer English Course in London — Level B1 (Formal)',
+                titleVi: 'Gợi ý từ vựng, cấu trúc và dàn ý trình độ B1 (Văn phong trang trọng)',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Đây là bức thư điện tử trang trọng (<strong>Formal email</strong>) gửi Giám đốc khóa học (<em>Course Director</em>). Ở trình độ <strong>Level B1</strong>, bạn mở thư bằng <em>Dear Sir/Madam,</em>, <strong>không dùng dạng viết tắt</strong> (<em>I am, I would like</em>) và chia 3 đoạn thân bài rành mạch ứng với 3 yêu cầu của đề.',
+                stepsHeader: 'Bố cục bức thư trang trọng gửi Giám đốc khóa học (Level B1) gồm 5 phần:',
+                steps: [
+                    '1. <strong>Mở thư:</strong> Chào <em>Dear Sir/Madam,</em>, nêu mục đích hỏi thông tin về khóa tiếng Anh mùa hè tháng tới và lý do tham gia (cải thiện tiếng Anh và luyện nói cùng các học viên khác).',
+                    '2. <strong>Đoạn 1 (Ngày học &amp; Lịch học):</strong> Hỏi ngày chính xác của khóa học, lịch học, số giờ học mỗi ngày và lớp học tổ chức vào buổi sáng hay buổi chiều.',
+                    '3. <strong>Đoạn 2 (Học phí &amp; Giảm giá):</strong> Hỏi tổng chi phí khóa học và xem có giảm giá cho học viên đăng ký sớm không.',
+                    '4. <strong>Đoạn 3 (Chỗ ở):</strong> Hỏi trường có cung cấp chỗ ở (ký túc xá sinh viên hoặc phòng ở cùng gia đình bản xứ) không và mức chi phí là bao nhiêu.',
+                    '5. <strong>Kết thư:</strong> Cảm ơn sự giúp đỡ, bày tỏ mong đợi hồi âm và chào trang trọng (<em>Kind regards,</em>).'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử trang trọng hỏi thông tin khóa học (Formal inquiry email).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Giám đốc khóa học (không biết tên) → dùng <em>Dear Sir/Madam,</em> và kết bằng <em>Kind regards,</em>; không viết tắt.',
+                    '<strong>3 yêu cầu bắt buộc trong đề:</strong><ul><li>Hỏi về ngày chính xác của khóa học và lịch học (<em>exact dates of the courses and the class schedules</em>).</li><li>Hỏi về học phí và các khoản giảm giá có thể có (<em>tuition fees and potential discounts</em>).</li><li>Hỏi về các lựa chọn chỗ ở do trường cung cấp (<em>accommodation options provided by the school</em>).</li></ul>',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc Formal B1:</strong><ul><li>Mở thư trực tiếp: <code>I am writing to ask for some information about... I am interested in joining... because...</code></li><li>Hỏi lịch học với bị động: <code>whether classes are held in the morning or afternoon.</code></li><li>Đưa ví dụ làm rõ ý hỏi: <code>provide a place to stay, such as a student residence or a room with a local family?</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Chào <em>Dear Sir/Madam,</em>, nêu mục đích hỏi thông tin khóa tiếng Anh mùa hè tháng tới và lý do muốn cải thiện tiếng Anh cũng như thực hành nói cùng các bạn học khác.',
+                    '<strong>2. Thân bài 1 — Ngày học &amp; Lịch học (Ý 1):</strong> Hỏi ngày chính xác và lịch học của khóa, số giờ học mỗi ngày và lớp học diễn ra buổi sáng hay buổi chiều.',
+                    '<strong>3. Thân bài 2 — Học phí &amp; Giảm giá (Ý 2):</strong> Dùng <em>In addition</em> để hỏi chi phí khóa học và liệu có giảm giá cho học viên đăng ký sớm hay không.',
+                    '<strong>4. Thân bài 3 — Chỗ ở (Ý 3):</strong> Dùng <em>Finally</em> để hỏi trường có cung cấp chỗ ở (như ký túc xá sinh viên hoặc ở cùng gia đình địa phương) không và giá bao nhiêu.',
+                    '<strong>5. Kết thư &amp; Ký tên:</strong> Cảm ơn sự hỗ trợ, mong nhận hồi âm và ký tên trang trọng (<em>Kind regards,</em>).'
+                ],
+                vocab: [
+                    ['practise speaking', 'v. phr.', 'luyện tập kỹ năng nói', 'Learners can practise speaking in small discussion groups.'],
+                    ['exact dates', 'n. phr.', 'ngày chính xác', 'Please confirm the exact dates of the orientation week.'],
+                    ['class schedule', 'n. phr.', 'lịch học trên lớp', 'The new class schedule will be posted on Monday morning.'],
+                    ['be held', 'v. (passive)', 'được tổ chức', 'Weekly workshops are held in the main auditorium.'],
+                    ['register early', 'v. phr.', 'đăng ký sớm', 'Visitors who register early receive priority seating.'],
+                    ['accommodation', 'n. (uncountable)', 'chỗ ở, nơi lưu trú', 'Affordable accommodation is easy to find near the campus.'],
+                    ['student residence', 'n. phr.', 'ký túc xá sinh viên', 'The student residence is only ten minutes away by bus.'],
+                    ['local family', 'n. phr.', 'gia đình bản xứ / địa phương', 'Staying with a local family helps travelers learn daily customs.']
+                ],
+                tipTitle: 'Lưu ý quan trọng khi viết Formal Email Level B1',
+                tipText: 'Từ <strong>accommodation</strong> trong tiếng Anh-Anh là <strong>danh từ không đếm được</strong> (không thêm <em>-s</em>, không dùng <em>an accommodation</em>). Ngoài ra nhớ không dùng dạng viết tắt (<em>I am / I would</em>) trong thư gửi Giám đốc khóa học.'
+            },
+            b2: {
+                titleEn: 'Summer English Course in London — Level B2 (Formal)',
+                titleVi: 'Gợi ý từ vựng nâng cao, cấu trúc trang trọng và dàn ý trình độ B2',
+                exampleColHeader: 'Ví dụ minh họa',
+                intro: 'Ở trình độ <strong>Level B2</strong>, bài viết nâng cấp diễn đạt tự nhiên và chuẩn học thuật hơn thông qua các cụm từ chính xác: <em>programme, everyday situations, starting and finishing dates, as well as, tuition fees, early registration, international students, I would appreciate some information about, host families</em>.',
+                stepsHeader: 'Các điểm nâng cấp giúp bài viết đạt chuẩn Level B2:',
+                steps: [
+                    '1. <strong>Mở thư cụ thể mục tiêu:</strong> Dùng <em>joining the programme</em>, <em>improve my speaking skills</em> và <em>become more confident when using English in everyday situations</em>.',
+                    '2. <strong>Đoạn 1 (Ngày học &amp; Lịch học):</strong> Hỏi cụ thể <em>the exact starting and finishing dates, as well as the class schedule</em> và <em>how many hours of lessons students have each day</em>.',
+                    '3. <strong>Đoạn 2 (Học phí, Giảm giá &amp; Chỗ ở):</strong> Gộp mạch lạc <em>the tuition fees and whether any discounts are available for early registration or international students</em>; nâng cấp sang mẫu câu lịch sự <em>I would appreciate some information about the accommodation options provided by the school</em> và cụm <em>host families</em>.',
+                    '4. <strong>Kết thư trang trọng:</strong> <em>Thank you for your time. I look forward to hearing from you. / Kind regards,</em>'
+                ],
+                analysis: [
+                    '<strong>Dạng bài:</strong> Thư điện tử trang trọng hỏi thông tin khóa học (Formal inquiry email).',
+                    '<strong>Người đọc &amp; giọng văn:</strong> Giám đốc khóa học (<em>Dear Sir/Madam,</em> → <em>Kind regards,</em>); lịch sự, chuẩn mực, không viết tắt.',
+                    '<strong>Độ dài:</strong> Tối thiểu 120 từ.',
+                    '<strong>Ngữ pháp &amp; Cấu trúc ăn điểm Level B2:</strong><ul><li>Mở rộng đối tượng bằng liên từ ghép: <code>the exact starting and finishing dates of the course, as well as the class schedule?</code></li><li>Câu hỏi gián tiếp gộp danh từ + mệnh đề <em>whether</em>: <code>could you let me know the tuition fees and whether any discounts are available for...?</code></li><li>Cấu trúc yêu cầu lịch sự cao: <code>I would appreciate some information about + N + V-ed (reduced relative clause).</code></li></ul>'
+                ],
+                outline: [
+                    '<strong>1. Lời chào &amp; Mở thư:</strong> Chào <em>Dear Sir/Madam,</em>, nêu mục đích hỏi thông tin khóa tiếng Anh mùa hè tháng tới và lý do muốn nâng cao kỹ năng nói cũng như tự tin hơn khi dùng tiếng Anh trong các tình huống hàng ngày.',
+                    '<strong>2. Thân bài 1 — Ngày học &amp; Lịch học (Ý 1):</strong> Hỏi ngày bắt đầu – kết thúc chính xác cùng lịch học, số giờ học mỗi ngày và thời gian tổ chức lớp (sáng hay chiều).',
+                    '<strong>3. Thân bài 2 — Học phí, Giảm giá &amp; Chỗ ở (Ý 2 &amp; 3):</strong> Hỏi mức học phí và các ưu đãi giảm giá cho đăng ký sớm hoặc sinh viên quốc tế; cuối cùng bày tỏ mong muốn nhận thông tin về các lựa chọn chỗ ở trường cung cấp (ký túc xá sinh viên hoặc gia đình bản xứ) cùng chi phí.',
+                    '<strong>4. Kết thư &amp; Ký tên:</strong> Cảm ơn thời gian của giám đốc khóa học, mong nhận hồi âm và chào trang trọng (<em>Kind regards,</em>).'
+                ],
+                vocab: [
+                    ['programme', 'n.', 'chương trình đào tạo / khóa học', 'The exchange programme welcomes undergraduates every July.'],
+                    ['everyday situations', 'n. phr.', 'các tình huống thường ngày', 'Role-play activities prepare learners for everyday situations.'],
+                    ['starting and finishing dates', 'n. phr.', 'ngày bắt đầu và ngày kết thúc', 'Check the starting and finishing dates before booking flights.'],
+                    ['as well as', 'conj. phr.', 'cũng như là', 'The brochure lists course fees as well as exam deadlines.'],
+                    ['tuition fees', 'n. phr.', 'học phí', 'Students can pay their tuition fees in two installments.'],
+                    ['early registration', 'n. phr.', 'việc đăng ký sớm', 'Conference organizers encourage early registration to save costs.'],
+                    ['international students', 'n. phr.', 'sinh viên / học viên quốc tế', 'Orientation sessions help international students settle in quickly.'],
+                    ['host families', 'n. phr.', 'các gia đình bản xứ nhận học sinh ở ghép', 'Many summer schools match teenagers with friendly host families.']
+                ],
+                upgrades: [
+                    ['Mở thư', 'joining the course... improve my English and practise speaking', '<strong>joining the programme... improve my speaking skills and become more confident when using English in everyday situations</strong>'],
+                    ['Ngày &amp; Lịch học', 'the exact dates of the course and the class schedule / how many hours students study', '<strong>the exact starting and finishing dates of the course, as well as the class schedule</strong> / <strong>how many hours of lessons students have</strong>'],
+                    ['Học phí &amp; Giảm giá', 'how much the course costs / students who register early', '<strong>the tuition fees and whether any discounts are available for early registration or international students</strong>'],
+                    ['Chỗ ở', 'I would like to ask about accommodation / a room with a local family', '<strong>I would appreciate some information about the accommodation options provided by the school</strong> / <strong>host families</strong>']
+                ],
+                tipTitle: 'Mẹo nâng band điểm Formal Email từ B1 lên B2',
+                tipText: 'Biến mệnh đề động từ dài thành cụm danh từ học thuật (<em>students who register early</em> → <strong>early registration</strong>; <em>a room with a local family</em> → <strong>host families</strong>; <em>how much the course costs</em> → <strong>the tuition fees</strong>) và dùng <strong>I would appreciate some information about...</strong> sẽ giúp văn phong chuyên nghiệp hơn rõ rệt.'
+            }
         }
     };
 
@@ -2713,7 +2836,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 16b.5 Word Counter, Prompt Switcher (3 Đề), LocalStorage Draft, Cloud Submit & Sample Comparison
+    // 16b.5 Word Counter, Prompt Switcher (4 Đề), LocalStorage Draft, Cloud Submit & Sample Comparison
     function getInquiryMinWords() {
         return parseInt((inquiryTextarea && inquiryTextarea.getAttribute('data-min-words')) || '120', 10);
     }
