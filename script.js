@@ -351,6 +351,20 @@ document.addEventListener('DOMContentLoaded', () => {
         sidebarBackdrop.addEventListener('click', closeMobileSidebar);
     }
 
+    // Collapsible Task 01 / Task 02 accordion cards inside sidebar
+    document.querySelectorAll('[data-sb-toggle]').forEach(toggleBtn => {
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const targetId = toggleBtn.getAttribute('data-sb-toggle');
+            const cardEl = targetId ? document.getElementById(targetId) : null;
+            if (!cardEl) return;
+            const collapsed = cardEl.classList.toggle('collapsed');
+            toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        });
+    });
+
+    const dashboardCrumbEl = document.getElementById('vs-dashboard-crumb');
+
     function updateTopbarForView(viewId) {
         const meta = VIEW_META[viewId] || VIEW_META['home-dashboard'];
         const isDashboardView = DASHBOARD_SIDEBAR_VIEWS.has(viewId);
@@ -365,6 +379,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (focusNavGroup) {
             focusNavGroup.style.display = isDashboardView ? 'none' : 'flex';
+        }
+
+        if (dashboardCrumbEl) {
+            if (viewId === 'task1-hub') {
+                dashboardCrumbEl.textContent = 'Task 01 · 8 bài học';
+            } else if (viewId === 'task2-hub') {
+                dashboardCrumbEl.textContent = 'Task 02 · 6 mục';
+            } else if (viewId === 'my-submissions') {
+                dashboardCrumbEl.textContent = 'Bài viết đã nộp';
+            } else {
+                dashboardCrumbEl.textContent = 'Tổng quan · 2 Task';
+            }
         }
 
         // Highlight active item in sidebar
@@ -2700,6 +2726,24 @@ document.addEventListener('DOMContentLoaded', () => {
             sbCountEl.textContent = String(subs.length);
             sbCountEl.style.display = subs.length > 0 ? 'inline-block' : 'none';
         }
+
+        // Update Sidebar Progress Widget & Submitted Lesson Checkmarks
+        const totalLessons = (CLOUD && Array.isArray(CLOUD.LESSONS_CATALOG) && CLOUD.LESSONS_CATALOG.length) || 10;
+        const progressRatioEl = document.getElementById('sb-progress-ratio');
+        const progressFillEl = document.getElementById('sb-progress-fill');
+        const pct = Math.min(100, Math.round((subs.length / totalLessons) * 100));
+        if (progressRatioEl) {
+            progressRatioEl.textContent = `${subs.length}/${totalLessons}`;
+        }
+        if (progressFillEl) {
+            progressFillEl.style.width = `${pct}%`;
+        }
+        document.querySelectorAll('[data-sb-lesson-id]').forEach(btn => {
+            const lid = btn.getAttribute('data-sb-lesson-id');
+            const isSub = Boolean(lid && authState.submissionsByLessonId && authState.submissionsByLessonId[lid] && authState.submissionsByLessonId[lid].is_submitted);
+            btn.classList.toggle('submitted', isSub);
+        });
+
         if (headingEl) {
             headingEl.textContent = `Bài viết đã nộp · ${subs.length} bài`;
         }

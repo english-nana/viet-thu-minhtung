@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3.0">
+    <link rel="stylesheet" href="style.css?v=3.1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -20,68 +20,92 @@
         <!-- Mobile Sidebar Backdrop -->
         <div class="ej-sidebar-backdrop" id="ej-sidebar-backdrop"></div>
 
-        <!-- Neo-Brutalist Left Sidebar (Automatically Hidden Inside Specific Lessons) -->
+        <!-- Original Soft Neo-Brutalist Studio Sidebar (Auto-Hidden Inside Specific Lessons) -->
         <aside class="ej-sidebar" id="ej-sidebar" aria-label="Điều hướng khóa học">
             <div class="ej-sidebar-header">
                 <button type="button" class="ej-sb-logo-btn" data-open-view="home-dashboard" title="Về Tổng quan">
-                    <span class="ej-sb-logo-badge"><i class="fas fa-pen-nib"></i></span>
+                    <span class="ej-sb-logo-badge"><i class="fas fa-feather-alt"></i></span>
                     <div class="ej-sb-logo-text">
-                        <span class="ej-sb-logo-sub">VSTEP</span>
-                        <span class="ej-sb-logo-main">WRITING B1–B2</span>
+                        <span class="ej-sb-logo-main">VSTEP Writing</span>
+                        <span class="ej-sb-logo-sub">B1 – B2 Studio</span>
                     </div>
-                </button>
-                <button type="button" class="ej-sidebar-collapse-btn" id="ej-sidebar-collapse-btn" title="Thu gọn / Mở rộng thanh điều hướng" aria-label="Thu gọn thanh điều hướng">
-                    <i class="fas fa-columns"></i>
                 </button>
             </div>
 
             <nav class="ej-sidebar-nav">
                 <div class="ej-sb-group">
                     <button type="button" class="ej-sb-item active" data-open-view="home-dashboard" data-sb-view="home-dashboard" title="Tổng quan">
-                        <i class="fas fa-th-large ej-sb-ico"></i>
+                        <i class="fas fa-compass ej-sb-ico"></i>
                         <span class="ej-sb-label">Tổng quan</span>
                     </button>
                     <button type="button" class="ej-sb-item" data-open-view="my-submissions" data-sb-view="my-submissions" title="Lịch sử nộp bài">
-                        <i class="far fa-clock ej-sb-ico"></i>
-                        <span class="ej-sb-label">Lịch sử nộp bài</span>
+                        <i class="fas fa-history ej-sb-ico"></i>
+                        <span class="ej-sb-label">Bài viết đã nộp</span>
                         <span class="ej-sb-count" id="sb-submissions-count" style="display: none;">0</span>
                     </button>
                 </div>
 
-                <div class="ej-sb-section-label">TASK 01 · VIẾT THƯ</div>
-                <div class="ej-sb-group">
-                    <button type="button" class="ej-sb-item" data-open-view="task1-hub" data-sb-view="task1-hub" title="Danh sách Task 01">
-                        <i class="far fa-envelope ej-sb-ico"></i>
-                        <span class="ej-sb-label">Tất cả bài Task 01</span>
-                    </button>
-                    <div class="ej-sb-tree">
-                        <button type="button" class="ej-sb-subitem" data-open-view="ly-thuyet">Lý thuyết chung</button>
-                        <button type="button" class="ej-sb-subitem" data-open-view="khuyen-nghi">Thư khuyên / đề xuất</button>
-                        <button type="button" class="ej-sb-subitem" data-open-view="hoi-thong-tin">Thư hỏi thông tin</button>
-                        <button type="button" class="ej-sb-subitem" data-open-view="cung-cap-thong-tin">Thư cung cấp thông tin</button>
-                        <button type="button" class="ej-sb-subitem" data-open-view="phan-nan">Thư phàn nàn</button>
-                        <button type="button" class="ej-sb-subitem" data-open-view="danh-gia">Thư cho đánh giá</button>
-                        <button type="button" class="ej-sb-subitem" data-open-view="xin-loi">Thư xin lỗi</button>
-                        <button type="button" class="ej-sb-subitem" data-open-view="xin-viec">Thư xin việc</button>
+                <!-- TASK 01 COLLAPSIBLE CARD -->
+                <div class="vs-sb-card" id="sb-card-task1">
+                    <div class="vs-sb-card-head">
+                        <button type="button" class="ej-sb-item vs-sb-head-btn" data-open-view="task1-hub" data-sb-view="task1-hub" title="Writing Task 01 · Viết Thư">
+                            <span class="vs-sb-task-pill t1">T1</span>
+                            <span class="ej-sb-label">Viết Thư &amp; Email</span>
+                        </button>
+                        <button type="button" class="vs-sb-acc-toggle" data-sb-toggle="sb-card-task1" aria-expanded="true" title="Đóng / Mở danh sách Task 01">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div class="vs-sb-card-list">
+                        <button type="button" class="vs-sb-lesson-btn" data-open-view="ly-thuyet"><span class="vs-sb-num">00</span><span>Lý thuyết chung</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-view="khuyen-nghi"><span class="vs-sb-num">01</span><span>Thư khuyên / đề xuất</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-view="hoi-thong-tin"><span class="vs-sb-num">02</span><span>Thư hỏi thông tin</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-view="cung-cap-thong-tin"><span class="vs-sb-num">03</span><span>Thư cung cấp thông tin</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-view="phan-nan"><span class="vs-sb-num">04</span><span>Thư phàn nàn</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-view="danh-gia"><span class="vs-sb-num">05</span><span>Thư cho đánh giá</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-view="xin-loi"><span class="vs-sb-num">06</span><span>Thư xin lỗi</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-view="xin-viec"><span class="vs-sb-num">07</span><span>Thư xin việc</span></button>
                     </div>
                 </div>
 
-                <div class="ej-sb-section-label">TASK 02 · VIẾT LUẬN</div>
-                <div class="ej-sb-group">
-                    <button type="button" class="ej-sb-item" data-open-view="task2-hub" data-sb-view="task2-hub" title="Danh sách Task 02">
-                        <i class="far fa-file-alt ej-sb-ico"></i>
-                        <span class="ej-sb-label">Tất cả bài Task 02</span>
-                    </button>
-                    <div class="ej-sb-tree">
-                        <button type="button" class="ej-sb-subitem" data-open-view="task2-ly-thuyet">Lý thuyết chung</button>
-                        <button type="button" class="ej-sb-subitem" data-open-essay="children-devices">CĐ 1: Trẻ em &amp; Thiết bị</button>
-                        <button type="button" class="ej-sb-subitem" data-open-essay="fast-fashion">CĐ 2: Thời trang nhanh</button>
-                        <button type="button" class="ej-sb-subitem" data-open-essay="choosing-job">CĐ 3: Lựa chọn công việc</button>
-                        <button type="button" class="ej-sb-subitem" data-open-essay="self-employment">CĐ 4: Tự làm chủ</button>
-                        <button type="button" class="ej-sb-subitem" data-open-essay="traffic-lights">CĐ 5: Bỏ đèn giao thông</button>
+                <!-- TASK 02 COLLAPSIBLE CARD -->
+                <div class="vs-sb-card" id="sb-card-task2">
+                    <div class="vs-sb-card-head">
+                        <button type="button" class="ej-sb-item vs-sb-head-btn" data-open-view="task2-hub" data-sb-view="task2-hub" title="Writing Task 02 · Viết Luận">
+                            <span class="vs-sb-task-pill t2">T2</span>
+                            <span class="ej-sb-label">Viết Luận (Essay)</span>
+                        </button>
+                        <button type="button" class="vs-sb-acc-toggle" data-sb-toggle="sb-card-task2" aria-expanded="true" title="Đóng / Mở danh sách Task 02">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div class="vs-sb-card-list">
+                        <button type="button" class="vs-sb-lesson-btn" data-open-view="task2-ly-thuyet"><span class="vs-sb-num">00</span><span>Lý thuyết chung</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-essay="children-devices" data-sb-lesson-id="children-devices"><span class="vs-sb-num">01</span><span>Trẻ em &amp; Thiết bị</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-essay="fast-fashion" data-sb-lesson-id="fast-fashion"><span class="vs-sb-num">02</span><span>Thời trang nhanh</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-essay="choosing-job" data-sb-lesson-id="choosing-job"><span class="vs-sb-num">03</span><span>Lựa chọn công việc</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-essay="self-employment" data-sb-lesson-id="self-employment"><span class="vs-sb-num">04</span><span>Tự làm chủ</span></button>
+                        <button type="button" class="vs-sb-lesson-btn" data-open-essay="traffic-lights" data-sb-lesson-id="traffic-lights"><span class="vs-sb-num">05</span><span>Bỏ đèn giao thông</span></button>
                     </div>
                 </div>
             </nav>
+
+            <!-- Sidebar Footer: Progress Widget + Collapse Button -->
+            <div class="vs-sb-footer">
+                <div class="vs-sb-progress-card">
+                    <div class="vs-sb-progress-top">
+                        <span>Tiến độ nộp bài</span>
+                        <strong id="sb-progress-ratio">0/10</strong>
+                    </div>
+                    <div class="vs-sb-progress-track">
+                        <div class="vs-sb-progress-fill" id="sb-progress-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <button type="button" class="vs-sb-collapse-footer-btn" id="ej-sidebar-collapse-btn" title="Thu gọn / Mở rộng thanh điều hướng">
+                    <i class="fas fa-angle-double-left" id="sb-collapse-icon"></i>
+                    <span class="ej-sb-label">Thu gọn menu</span>
+                </button>
+            </div>
         </aside>
 
         <!-- Main Workspace Column (Topbar + Content) -->
@@ -95,18 +119,20 @@
                             <i class="fas fa-bars"></i>
                         </button>
 
-                        <!-- Quick Search Bar (Visible in Dashboard / Hub views with Sidebar) -->
-                        <div class="ej-topbar-search-wrap" id="ej-topbar-search-wrap">
-                            <i class="fas fa-search ej-search-ico"></i>
-                            <input
-                                type="text"
-                                id="ej-quick-search-input"
-                                class="ej-quick-search-input"
-                                placeholder="Tìm nhanh bài học, dạng thư, chủ đề luận..."
-                                autocomplete="off"
-                            />
-                            <kbd class="ej-search-kbd">⌘K</kbd>
-                            <div class="ej-search-dropdown" id="ej-search-dropdown" style="display: none;"></div>
+                        <!-- Dashboard Breadcrumb + Rounded Search Pill (Visible with Sidebar) -->
+                        <div class="vs-dashboard-topbar-left" id="ej-topbar-search-wrap">
+                            <span class="vs-section-crumb" id="vs-dashboard-crumb">Tổng quan · 2 Task</span>
+                            <div class="ej-topbar-search-wrap">
+                                <i class="fas fa-search ej-search-ico"></i>
+                                <input
+                                    type="text"
+                                    id="ej-quick-search-input"
+                                    class="ej-quick-search-input"
+                                    placeholder="Tìm bài học, chủ đề..."
+                                    autocomplete="off"
+                                />
+                                <div class="ej-search-dropdown" id="ej-search-dropdown" style="display: none;"></div>
+                            </div>
                         </div>
 
                         <!-- Focus Lesson Header (Visible ONLY inside a specific lesson when Sidebar disappears) -->
@@ -6348,8 +6374,8 @@
         </div>
     </div>
 
-    <script src="supabase-config.js?v=3.0"></script>
-    <script src="supabase-client.js?v=3.0"></script>
-    <script src="script.js?v=3.0"></script>
+    <script src="supabase-config.js?v=3.1"></script>
+    <script src="supabase-client.js?v=3.1"></script>
+    <script src="script.js?v=3.1"></script>
 </body>
 </html>

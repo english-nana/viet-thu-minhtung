@@ -5964,8 +5964,8 @@ mark.idea-hl {
 }
 
 /* ==========================================================================
-   NEO-BRUTALIST SIDEBAR SHELL & FOCUS LESSON MODE
-   (Inspired by theenglishjourneyapp.com/dashboard/khoa-hoc/A1-A2-FOUNDATION)
+   ORIGINAL SOFT NEO-BRUTALIST STUDIO SIDEBAR & FOCUS LESSON MODE
+   (Warm Studio-Paper #F4F1EA · Ink-Black Active Pills · Accordion Task Cards)
    ========================================================================== */
 
 .app-layout {
@@ -5990,10 +5990,11 @@ mark.idea-hl {
     overflow: hidden;
 }
 
-/* Topbar height alignment with sidebar header */
 .dt-topbar {
     height: 60px;
     min-height: 60px;
+    background: #FFFFFF;
+    border-bottom: 2px solid #18181B;
 }
 
 .app-layout.focus-lesson-mode .dt-topbar {
@@ -6001,11 +6002,11 @@ mark.idea-hl {
     min-height: 54px;
 }
 
-/* Left Fixed Sidebar */
+/* Warm Studio-Paper Left Sidebar */
 .ej-sidebar {
-    width: 248px;
-    flex: 0 0 248px;
-    background: #FFFFFF;
+    width: 266px;
+    flex: 0 0 266px;
+    background: #F4F1EA;
     border-right: 2px solid #18181B;
     display: flex;
     flex-direction: column;
@@ -6020,7 +6021,7 @@ mark.idea-hl {
     display: none;
 }
 
-/* Focus Lesson Mode: completely hide sidebar for 100% content focus */
+/* Focus Lesson Mode: Hide sidebar completely for 100% content width */
 .app-layout.focus-lesson-mode .ej-sidebar,
 .app-layout.focus-lesson-mode .ej-sidebar-backdrop,
 .app-layout.focus-lesson-mode .ej-mobile-menu-btn {
@@ -6039,16 +6040,14 @@ mark.idea-hl {
     border-bottom: 2px solid #18181B;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    position: relative;
-    background: #FFFFFF;
+    background: #F4F1EA;
     flex-shrink: 0;
 }
 
 .ej-sb-logo-btn {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 11px;
     background: transparent;
     border: none;
     padding: 0;
@@ -6059,74 +6058,57 @@ mark.idea-hl {
 }
 
 .ej-sb-logo-badge {
-    width: 34px;
-    height: 34px;
-    background: #FFE55C;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: #18181B;
     border: 2px solid #18181B;
-    box-shadow: 2px 2px 0px #18181B;
-    color: #18181B;
-    font-size: 14px;
+    box-shadow: 3px 3px 0px #FFE55C;
+    color: #FFE55C;
+    font-size: 15px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    transition: transform 0.12s ease;
+}
+
+.ej-sb-logo-btn:hover .ej-sb-logo-badge {
+    transform: translate(-1px, -1px);
 }
 
 .ej-sb-logo-text {
     display: flex;
     flex-direction: column;
-    line-height: 1.1;
+    line-height: 1.15;
     overflow: hidden;
 }
 
-.ej-sb-logo-sub {
-    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-    font-size: 9.5px;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    color: #71717A;
-    text-transform: uppercase;
-}
-
 .ej-sb-logo-main {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 900;
-    letter-spacing: 0.01em;
+    letter-spacing: -0.01em;
     color: #18181B;
     white-space: nowrap;
 }
 
-/* Square Collapse Button sitting on sidebar border intersection */
-.ej-sidebar-collapse-btn {
-    position: absolute;
-    right: -15px;
-    bottom: -15px;
-    width: 28px;
-    height: 28px;
-    background: #FFFFFF;
-    border: 2px solid #18181B;
-    box-shadow: 2px 2px 0px #18181B;
-    color: #18181B;
-    font-size: 12px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 300;
-    transition: background-color 0.12s ease, transform 0.12s ease;
-}
-
-.ej-sidebar-collapse-btn:hover {
-    background: #FFE55C;
+.ej-sb-logo-sub {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #71717A;
+    text-transform: uppercase;
 }
 
 /* Sidebar Navigation Scroll Area */
 .ej-sidebar-nav {
     flex: 1;
     overflow-y: auto;
-    padding: 14px 12px 28px;
+    padding: 14px 12px 16px;
     display: flex;
     flex-direction: column;
+    gap: 12px;
 }
 
 .ej-sidebar-nav::-webkit-scrollbar {
@@ -6134,60 +6116,62 @@ mark.idea-hl {
 }
 
 .ej-sidebar-nav::-webkit-scrollbar-thumb {
-    background: #D4D4D8;
-    border-radius: 3px;
+    background: #D6D3CB;
+    border-radius: 999px;
 }
 
 .ej-sb-group {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 6px;
 }
 
-.ej-sb-section-label {
-    padding: 16px 10px 6px;
-    font-size: 10.5px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    color: #71717A;
-    text-transform: uppercase;
-}
-
+/* Soft Neo-Brutalist Navigation Item (Inverted Ink-Black Active Polarity!) */
 .ej-sb-item {
     width: 100%;
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 9px 11px;
+    padding: 9px 12px;
     border: 2px solid transparent;
-    border-radius: 0;
+    border-radius: 10px;
     background: transparent;
-    color: #18181B;
+    color: #27272A;
     font-family: inherit;
     font-size: 13.5px;
-    font-weight: 600;
+    font-weight: 700;
     text-align: left;
     cursor: pointer;
-    transition: background-color 0.12s ease, border-color 0.12s ease;
+    transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 .ej-sb-item:hover {
-    background: #F4F4F5;
+    background: #EAE5DA;
+    color: #18181B;
 }
 
 .ej-sb-item.active {
-    background: #FFE55C;
+    background: #18181B;
     border: 2px solid #18181B;
-    box-shadow: 2px 2px 0px #18181B;
-    color: #18181B;
+    box-shadow: 3px 3px 0px #FFE55C;
+    color: #FFFFFF;
     font-weight: 800;
+}
+
+.ej-sb-item.active .ej-sb-ico {
+    color: #FFE55C;
+}
+
+.ej-sb-item.active .ej-sb-count {
+    background: #FFE55C;
+    color: #18181B;
 }
 
 .ej-sb-ico {
     width: 18px;
     text-align: center;
     font-size: 14px;
-    color: #27272A;
+    color: #3F3F46;
     flex-shrink: 0;
 }
 
@@ -6202,55 +6186,239 @@ mark.idea-hl {
     font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
     font-size: 11px;
     font-weight: 800;
-    padding: 1px 6px;
+    padding: 2px 7px;
+    border-radius: 999px;
     background: #18181B;
     color: #FFFFFF;
     flex-shrink: 0;
 }
 
-/* Sub-items vertical rail tree */
-.ej-sb-tree {
-    margin: 3px 0 6px 19px;
-    padding-left: 13px;
-    border-left: 1.5px solid #D4D4D8;
+/* Distinctive Collapsible Neo-Brutalist Task Accordion Cards */
+.vs-sb-card {
+    background: #FFFFFF;
+    border: 2px solid #18181B;
+    border-radius: 12px;
+    box-shadow: 3px 3px 0px #18181B;
+    overflow: hidden;
+}
+
+.vs-sb-card-head {
+    display: flex;
+    align-items: center;
+    padding: 4px;
+    gap: 4px;
+    border-bottom: 1.5px solid #E4E4E7;
+    background: #FFFFFF;
+}
+
+.vs-sb-card.collapsed .vs-sb-card-head {
+    border-bottom: none;
+}
+
+.vs-sb-head-btn {
+    flex: 1;
+    padding: 7px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.vs-sb-head-btn.active {
+    box-shadow: 2px 2px 0px #FFE55C;
+}
+
+.vs-sb-task-pill {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1.5px solid #18181B;
+    flex-shrink: 0;
+    line-height: 1.2;
+}
+
+.vs-sb-task-pill.t1 {
+    background: #FFE55C;
+    color: #18181B;
+}
+
+.vs-sb-task-pill.t2 {
+    background: #DDD6FE;
+    color: #3730A3;
+}
+
+.vs-sb-acc-toggle {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: #52525B;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.12s ease, transform 0.18s ease;
+}
+
+.vs-sb-acc-toggle:hover {
+    background: #F4F4F5;
+    color: #18181B;
+}
+
+.vs-sb-card.collapsed .vs-sb-acc-toggle i {
+    transform: rotate(-90deg);
+}
+
+.vs-sb-card-list {
+    padding: 6px;
     display: flex;
     flex-direction: column;
     gap: 2px;
+    background: #FFFFFF;
 }
 
-.ej-sb-subitem {
+.vs-sb-card.collapsed .vs-sb-card-list {
+    display: none;
+}
+
+.vs-sb-lesson-btn {
     width: 100%;
-    padding: 6px 9px;
-    border: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1.5px solid transparent;
+    border-radius: 7px;
     background: transparent;
-    color: #52525B;
+    color: #3F3F46;
     font-family: inherit;
-    font-size: 12.8px;
+    font-size: 12.5px;
     font-weight: 500;
     text-align: left;
     cursor: pointer;
-    border-radius: 4px;
-    line-height: 1.35;
-    transition: background-color 0.12s ease, color 0.12s ease;
+    line-height: 1.3;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.ej-sb-subitem:hover {
-    background: #F4F4F5;
+.vs-sb-lesson-btn:hover {
+    background: #FAF8F3;
+    border-color: #18181B;
     color: #18181B;
     font-weight: 600;
 }
 
-/* Collapsed Desktop Icon Rail State */
+.vs-sb-num {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 5px;
+    border-radius: 5px;
+    background: #F4F1EA;
+    color: #52525B;
+    flex-shrink: 0;
+}
+
+.vs-sb-lesson-btn:hover .vs-sb-num {
+    background: #FFE55C;
+    color: #18181B;
+}
+
+.vs-sb-lesson-btn.submitted::after {
+    content: "✓";
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 800;
+    color: #16A34A;
+}
+
+/* Sidebar Footer: Progress Card + Collapse Button */
+.vs-sb-footer {
+    padding: 12px;
+    border-top: 2px solid #18181B;
+    background: #EDE8DC;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.vs-sb-progress-card {
+    background: #FFFFFF;
+    border: 2px solid #18181B;
+    border-radius: 10px;
+    box-shadow: 2px 2px 0px #18181B;
+    padding: 9px 11px;
+}
+
+.vs-sb-progress-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #3F3F46;
+    margin-bottom: 6px;
+}
+
+.vs-sb-progress-top strong {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    color: #18181B;
+}
+
+.vs-sb-progress-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: #F4F1EA;
+    border: 1.5px solid #18181B;
+    overflow: hidden;
+}
+
+.vs-sb-progress-fill {
+    height: 100%;
+    background: #22C55E;
+    transition: width 0.25s ease;
+}
+
+.vs-sb-collapse-footer-btn {
+    width: 100%;
+    height: 34px;
+    padding: 0 11px;
+    border: 2px solid #18181B;
+    border-radius: 9px;
+    background: #FFFFFF;
+    color: #18181B;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    box-shadow: 2px 2px 0px #18181B;
+    transition: background-color 0.12s ease, transform 0.12s ease;
+}
+
+.vs-sb-collapse-footer-btn:hover {
+    background: #FFE55C;
+}
+
+/* Collapsed Desktop Icon Rail */
 .app-layout.sidebar-collapsed .ej-sidebar {
-    width: 68px;
-    flex: 0 0 68px;
+    width: 72px;
+    flex: 0 0 72px;
 }
 
 .app-layout.sidebar-collapsed .ej-sb-logo-text,
 .app-layout.sidebar-collapsed .ej-sb-label,
 .app-layout.sidebar-collapsed .ej-sb-count,
-.app-layout.sidebar-collapsed .ej-sb-section-label,
-.app-layout.sidebar-collapsed .ej-sb-tree {
+.app-layout.sidebar-collapsed .vs-sb-acc-toggle,
+.app-layout.sidebar-collapsed .vs-sb-card-list,
+.app-layout.sidebar-collapsed .vs-sb-progress-card {
     display: none;
 }
 
@@ -6264,28 +6432,65 @@ mark.idea-hl {
     padding: 10px 0;
 }
 
-/* Topbar Quick Search Input (Neo-Brutalist) */
+.app-layout.sidebar-collapsed .vs-sb-card {
+    box-shadow: 2px 2px 0px #18181B;
+}
+
+.app-layout.sidebar-collapsed .vs-sb-card-head {
+    border-bottom: none;
+    justify-content: center;
+}
+
+.app-layout.sidebar-collapsed .vs-sb-collapse-footer-btn i {
+    transform: rotate(180deg);
+}
+
+/* Topbar Dashboard Left: Section Crumb + Rounded Studio Search Pill */
+.vs-dashboard-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.vs-section-crumb {
+    display: inline-flex;
+    align-items: center;
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 2px solid #18181B;
+    background: #FFE55C;
+    color: #18181B;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+    box-shadow: 2px 2px 0px #18181B;
+}
+
 .ej-topbar-search-wrap {
     position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 370px;
+    width: 280px;
     max-width: 100%;
-    height: 38px;
-    padding: 0 10px 0 12px;
-    background: #FFFFFF;
+    height: 36px;
+    padding: 0 14px;
+    background: #F4F1EA;
     border: 2px solid #18181B;
-    transition: box-shadow 0.12s ease;
+    border-radius: 999px;
+    transition: background-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .ej-topbar-search-wrap:focus-within {
+    background: #FFFFFF;
     box-shadow: 2px 2px 0px #18181B;
 }
 
 .ej-search-ico {
-    font-size: 13px;
-    color: #71717A;
+    font-size: 12.5px;
+    color: #52525B;
     flex-shrink: 0;
 }
 
@@ -6306,24 +6511,15 @@ mark.idea-hl {
     color: #71717A;
 }
 
-.ej-search-kbd {
-    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-    font-size: 10.5px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border: 1px solid #D4D4D8;
-    background: #F4F4F5;
-    color: #71717A;
-    flex-shrink: 0;
-}
-
 .ej-search-dropdown {
     position: absolute;
-    top: calc(100% + 6px);
-    left: -2px;
-    right: -2px;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 360px;
+    max-width: calc(100vw - 32px);
     background: #FFFFFF;
     border: 2px solid #18181B;
+    border-radius: 12px;
     box-shadow: 4px 4px 0px #18181B;
     z-index: 500;
     max-height: 360px;
@@ -6336,7 +6532,7 @@ mark.idea-hl {
     border: none;
     border-bottom: 1px solid #F4F4F5;
     background: #FFFFFF;
-    padding: 10px 12px;
+    padding: 10px 14px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -6350,7 +6546,7 @@ mark.idea-hl {
 }
 
 .ej-search-result-btn:hover {
-    background: #FEF9C3;
+    background: #F4F1EA;
 }
 
 .ej-search-res-title {
@@ -6369,9 +6565,10 @@ mark.idea-hl {
     font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
     font-size: 10.5px;
     font-weight: 800;
-    padding: 2px 7px;
+    padding: 2px 8px;
+    border-radius: 6px;
     border: 1.5px solid #18181B;
-    background: #F4F4F5;
+    background: #FFE55C;
     color: #18181B;
     white-space: nowrap;
 }
@@ -6391,14 +6588,18 @@ mark.idea-hl {
     min-width: 0;
 }
 
-/* Neo-Brutalist Square Bell & Account Button (Matching Screenshot) */
+/* Soft Neo-Brutalist Topbar Controls (10px rounded, cohesive with sidebar) */
 .dt-topbar .notif-bell-btn {
     width: 38px;
     height: 38px;
     border: 2px solid #18181B;
-    border-radius: 0;
+    border-radius: 10px;
     background: #FFFFFF;
     box-shadow: 2px 2px 0px #18181B;
+}
+
+.dt-topbar .notif-bell-btn:hover {
+    background: #F4F1EA;
 }
 
 .dt-topbar .notif-bell-btn.has-unread {
@@ -6408,30 +6609,38 @@ mark.idea-hl {
 .dt-topbar .user-account-pill {
     height: 38px;
     border: 2px solid #18181B;
-    border-radius: 0;
+    border-radius: 10px;
     background: #FFFFFF;
     box-shadow: 2px 2px 0px #18181B;
     padding: 0 12px 0 7px;
 }
 
 .dt-topbar .user-account-pill:hover {
-    background: #FAFAFA;
+    background: #F4F1EA;
 }
 
 .dt-topbar .user-initials {
     width: 24px;
     height: 24px;
-    border-radius: 0;
+    border-radius: 7px;
     border: 1.5px solid #18181B;
-    background: #FFE55C;
-    color: #18181B;
+    background: #18181B;
+    color: #FFE55C;
 }
 
 .dt-topbar .top-pill-btn.teacher-nav-pill {
     height: 38px;
     border: 2px solid #18181B;
-    border-radius: 0;
+    border-radius: 10px;
     box-shadow: 2px 2px 0px #18181B;
+}
+
+.nb-back-btn {
+    border-radius: 10px;
+}
+
+.notif-dropdown {
+    border-radius: 12px;
 }
 
 .app-layout.focus-lesson-mode .dt-topbar .notif-bell-btn,
@@ -6450,7 +6659,8 @@ mark.idea-hl {
     width: 38px;
     height: 38px;
     border: 2px solid #18181B;
-    background: #FFFFFF;
+    border-radius: 10px;
+    background: #F4F1EA;
     box-shadow: 2px 2px 0px #18181B;
     color: #18181B;
     font-size: 15px;
@@ -6479,6 +6689,7 @@ mark.idea-hl {
 .ej-history-card {
     background: #FFFFFF;
     border: 2px solid #18181B;
+    border-radius: 12px;
     box-shadow: 4px 4px 0px #18181B;
     padding: 18px 20px;
     display: flex;
@@ -6520,10 +6731,11 @@ mark.idea-hl {
     text-align: center;
     background: #FFFFFF;
     border: 2px dashed #D4D4D8;
+    border-radius: 12px;
     color: #52525B;
 }
 
-/* Dashboard content area polish (edge-to-edge #FAFAFA next to Sidebar) */
+/* Dashboard content area polish */
 .content-area:has(#home-dashboard.active),
 .content-area:has(#task1-hub.active),
 .content-area:has(#task2-hub.active),
@@ -6563,7 +6775,7 @@ mark.idea-hl {
         display: inline-flex;
     }
 
-    .ej-sidebar-collapse-btn {
+    .vs-sb-collapse-footer-btn {
         display: none;
     }
 
@@ -6572,7 +6784,7 @@ mark.idea-hl {
         top: 0;
         left: 0;
         bottom: 0;
-        width: 268px;
+        width: 276px;
         flex: none;
         transform: translateX(-100%);
         transition: transform 0.2s ease;
@@ -6592,12 +6804,12 @@ mark.idea-hl {
         z-index: 400;
     }
 
-    .ej-topbar-search-wrap {
-        width: 220px;
+    .vs-section-crumb {
+        display: none;
     }
 
-    .ej-search-kbd {
-        display: none;
+    .ej-topbar-search-wrap {
+        width: 200px;
     }
 }
 
