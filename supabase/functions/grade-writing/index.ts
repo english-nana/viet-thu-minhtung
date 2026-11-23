@@ -135,7 +135,6 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
     const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const geminiApiKey = Deno.env.get("GEMINI_API_KEY") || "";
     const geminiModel = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
@@ -151,13 +150,12 @@ Deno.serve(async (req: Request) => {
     if (!authHeader.startsWith("Bearer ")) {
       return jsonResponse({ ok: false, error: "Chưa đăng nhập." }, 401);
     }
+    const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
 
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-    const { data: authData, error: authErr } = await userClient.auth.getUser();
+    const admin = createClient(supabaseUrl, supabaseServiceRoleKey);
+    const { data: authData, error: authErr } = await admin.auth.getUser(jwt);
     if (authErr || !authData?.user) {
-      return jsonResponse({ ok: false, error: "Phiên đăng nhập không hợp lệ." }, 401);
+      return jsonResponse({ ok: false, error: "Phiên đăng nhập không hợp lệ: " + (authErr?.message || "") }, 401);
     }
     const caller = authData.user;
     const callerEmail = String(caller.email || "").trim().toLowerCase();
@@ -170,8 +168,6 @@ Deno.serve(async (req: Request) => {
     if (!submissionId) {
       return jsonResponse({ ok: false, error: "Thiếu submission_id." }, 400);
     }
-
-    const admin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
     const [{ data: sub, error: subErr }, { data: teacherRow }] = await Promise.all([
       admin.from("writing_submissions").select("*").eq("id", submissionId).maybeSingle(),
