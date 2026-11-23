@@ -392,7 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (viewId === 'task1-hub') {
                 dashboardCrumbEl.textContent = 'Task 01 · 8 bài học';
             } else if (viewId === 'task2-hub') {
-                dashboardCrumbEl.textContent = 'Task 02 · 12 mục';
+                dashboardCrumbEl.textContent = 'Task 02 · 13 mục';
             } else if (viewId === 'my-submissions') {
                 dashboardCrumbEl.textContent = 'Bài viết đã nộp';
             } else {
@@ -519,7 +519,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: 'Chủ đề 8: Người trẻ thường xuyên nhảy việc', sub: 'Changing Jobs Frequently · Causes & Effects', tag: 'Task 02', essay: 'job-hopping' },
         { title: 'Chủ đề 9: Xung đột giữa cha mẹ và con tuổi teen', sub: 'Parent–Teenager Conflicts · Causes & Solutions', tag: 'Task 02', essay: 'parent-teen-conflicts' },
         { title: 'Chủ đề 10: Nguyên nhân gây căng thẳng ở người trẻ', sub: 'Stress Among Young People · Causes Essay', tag: 'Task 02', essay: 'youth-stress' },
-        { title: 'Chủ đề 11: Người cao tuổi với Điện thoại & Internet', sub: 'Mobile Phones, the Internet & the Elderly · Two-Part Question', tag: 'Task 02', essay: 'elderly-technology' }
+        { title: 'Chủ đề 11: Người cao tuổi với Điện thoại & Internet', sub: 'Mobile Phones, the Internet & the Elderly · Two-Part Question', tag: 'Task 02', essay: 'elderly-technology' },
+        { title: 'Chủ đề 12: Tác động của tòa nhà văn phòng kính', sub: 'Modern Glass Office Buildings · Effects Essay', tag: 'Task 02', essay: 'glass-office-buildings' }
     ];
 
     function normalizeSearchText(str) {
@@ -3214,6 +3215,11 @@ document.addEventListener('DOMContentLoaded', () => {
             title: 'Chủ đề 11: Người cao tuổi với Điện thoại & Internet',
             storageKey: 'vstep_essay_elderly_technology_draft',
             prompt: "Mobile phones and the internet are now very useful for old people. However, this part of the population is the fewer users of mobile phones and the Internet. In which ways can mobile phones and the Internet be useful for old people? How can old people be encouraged to use this new technology?"
+        },
+        'glass-office-buildings': {
+            title: 'Chủ đề 12: Tác động của tòa nhà văn phòng kính',
+            storageKey: 'vstep_essay_glass_office_buildings_draft',
+            prompt: "In recent years, working in modern glass office buildings has become increasingly common in many cities. However, this type of working environment can have several effects on workers and the environment. It may consume a large amount of energy, cause light pollution, and increase stress among office workers. Write an essay discussing the effects of working in modern glass office buildings."
         }
     };
 
