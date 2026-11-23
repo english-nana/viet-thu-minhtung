@@ -17,7 +17,8 @@
     { id: "traffic-lights", taskType: "task2", title: "Task 02 · Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc" },
     { id: "tourism-growth", taskType: "task2", title: "Task 02 · Chủ đề 6: Sự gia tăng lượng khách du lịch" },
     { id: "leaving-cities", taskType: "task2", title: "Task 02 · Chủ đề 7: Người trẻ bỏ phố về quê" },
-    { id: "job-hopping", taskType: "task2", title: "Task 02 · Chủ đề 8: Người trẻ thường xuyên nhảy việc" }
+    { id: "job-hopping", taskType: "task2", title: "Task 02 · Chủ đề 8: Người trẻ thường xuyên nhảy việc" },
+    { id: "parent-teen-conflicts", taskType: "task2", title: "Task 02 · Chủ đề 9: Xung đột giữa cha mẹ và con tuổi teen" }
   ];
 
   let cachedClient = null;

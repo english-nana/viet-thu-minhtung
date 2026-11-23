@@ -385,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (viewId === 'task1-hub') {
                 dashboardCrumbEl.textContent = 'Task 01 · 8 bài học';
             } else if (viewId === 'task2-hub') {
-                dashboardCrumbEl.textContent = 'Task 02 · 9 mục';
+                dashboardCrumbEl.textContent = 'Task 02 · 10 mục';
             } else if (viewId === 'my-submissions') {
                 dashboardCrumbEl.textContent = 'Bài viết đã nộp';
             } else {
@@ -507,7 +507,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: 'Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc', sub: 'Removing Traffic Lights · Opinion', tag: 'Task 02', essay: 'traffic-lights' },
         { title: 'Chủ đề 6: Sự gia tăng lượng khách du lịch', sub: 'Growth in Tourist Numbers · Advantages & Disadvantages', tag: 'Task 02', essay: 'tourism-growth' },
         { title: 'Chủ đề 7: Người trẻ bỏ phố về quê', sub: 'Leaving Cities for Rural Hometowns · Advantages & Disadvantages', tag: 'Task 02', essay: 'leaving-cities' },
-        { title: 'Chủ đề 8: Người trẻ thường xuyên nhảy việc', sub: 'Changing Jobs Frequently · Causes & Effects', tag: 'Task 02', essay: 'job-hopping' }
+        { title: 'Chủ đề 8: Người trẻ thường xuyên nhảy việc', sub: 'Changing Jobs Frequently · Causes & Effects', tag: 'Task 02', essay: 'job-hopping' },
+        { title: 'Chủ đề 9: Xung đột giữa cha mẹ và con tuổi teen', sub: 'Parent–Teenager Conflicts · Causes & Solutions', tag: 'Task 02', essay: 'parent-teen-conflicts' }
     ];
 
     function normalizeSearchText(str) {
@@ -2241,6 +2242,11 @@ document.addEventListener('DOMContentLoaded', () => {
             title: 'Chủ đề 8: Người trẻ thường xuyên nhảy việc',
             storageKey: 'vstep_essay_job_hopping_draft',
             prompt: "In recent years, it has become increasingly common for young people to change jobs frequently rather than staying with one employer for a long period. This trend can be attributed to several factors, and it brings about a number of consequences for both individuals and organizations. Analyze the causes of this trend among young people and its effects."
+        },
+        'parent-teen-conflicts': {
+            title: 'Chủ đề 9: Xung đột giữa cha mẹ và con tuổi teen',
+            storageKey: 'vstep_essay_parent_teen_conflicts_draft',
+            prompt: "Conflicts between parents and their teenage children have become increasingly common in modern families, often arising from generational differences and miscommunication. These conflicts can affect family relationships significantly if not addressed properly, making it important to understand their root causes and find effective ways to resolve them. Discuss the causes of conflicts between parents and their teenage children and suggest possible solutions."
         }
     };
 
