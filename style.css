@@ -6104,19 +6104,21 @@ mark.idea-hl {
 /* Sidebar Navigation Scroll Area */
 .ej-sidebar-nav {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    padding: 14px 12px 16px;
+    overscroll-behavior: contain;
+    padding: 14px 12px 24px;
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
 .ej-sidebar-nav::-webkit-scrollbar {
-    width: 5px;
+    width: 6px;
 }
 
 .ej-sidebar-nav::-webkit-scrollbar-thumb {
-    background: #D6D3CB;
+    background: #C7C2B8;
     border-radius: 999px;
 }
 
@@ -6124,6 +6126,7 @@ mark.idea-hl {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    flex-shrink: 0;
 }
 
 /* Soft Neo-Brutalist Navigation Item (Inverted Ink-Black Active Polarity!) */
@@ -6195,6 +6198,7 @@ mark.idea-hl {
 
 /* Distinctive Collapsible Neo-Brutalist Task Accordion Cards */
 .vs-sb-card {
+    flex-shrink: 0;
     background: #FFFFFF;
     border: 2px solid #18181B;
     border-radius: 12px;
