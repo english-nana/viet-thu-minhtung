@@ -3,7 +3,7 @@
 // ============================================================================
 
 (function () {
-  const CLASS_LIST = ["ONB204", "CB221"];
+  const CLASS_LIST = ["ONB204", "CB221", "CB212", "ONB102", "ONB104", "B210", "C1"];
   const LESSONS_CATALOG = [
     { id: "advice-1", taskType: "task1", title: "Task 01 · Đề 1: Mua hàng online lần đầu (Jay)" },
     { id: "advice-2", taskType: "task1", title: "Task 01 · Đề 2: Thông tin hội thảo công ty (Carol)" },

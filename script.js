@@ -4059,7 +4059,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 if (!CLOUD.CLASS_LIST.includes(chosenClass)) {
-                    authState.profileFormError = 'Vui lòng chọn lớp của bạn (ONB204 hoặc CB221).';
+                    authState.profileFormError = `Vui lòng chọn lớp của bạn (${CLOUD.CLASS_LIST.join(', ')}).`;
                     renderAuthGate();
                     return;
                 }
