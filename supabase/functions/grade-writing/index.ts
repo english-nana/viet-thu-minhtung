@@ -282,6 +282,64 @@ async function fetchWithTimeout(
   }
 }
 
+const DISCOVERED_MODELS_TTL_MS = 10 * 60 * 1000;
+const discoveredModelsCache = new Map<string, { models: string[]; fetchedAt: number }>();
+
+function rankFlashModelId(id: string): number {
+  const lower = id.toLowerCase();
+  const verMatch = lower.match(/^gemini-(\d+)(?:\.(\d+))?/);
+  const major = verMatch ? Number(verMatch[1]) : 0;
+  const minor = verMatch && verMatch[2] ? Number(verMatch[2]) : 0;
+  let score = major * 100 + minor * 10;
+  if (lower.includes("lite")) score -= 3;
+  if (lower.includes("preview") || lower.includes("exp")) score -= 2;
+  if (lower === "gemini-flash-latest") score = 350;
+  return score;
+}
+
+async function discoverActiveFlashModels(apiKey: string, timeoutMs: number): Promise<string[]> {
+  const cacheKey = apiKey.slice(-8);
+  const cached = discoveredModelsCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < DISCOVERED_MODELS_TTL_MS) {
+    return cached.models;
+  }
+
+  try {
+    const res = await fetchWithTimeout(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+      { method: "GET" },
+      Math.min(6000, Math.max(2500, timeoutMs))
+    );
+    if (!res.ok) return [];
+    const data = await res.json().catch(() => null);
+    const rawModels = Array.isArray(data?.models) ? data.models : [];
+
+    const filtered = rawModels
+      .filter((m: Record<string, unknown>) => {
+        const methods = Array.isArray(m?.supportedGenerationMethods) ? m.supportedGenerationMethods : [];
+        if (!methods.includes("generateContent")) return false;
+        const id = String(m?.name || "").replace(/^models\//, "").trim();
+        if (!id) return false;
+        if (/^gemini-(?:1\.|2\.0)/i.test(id)) return false;
+        if (/(?:tts|audio|image|live|embedding|robotics|computer-use|vision|thinking-exp|native-audio)/i.test(id)) {
+          return false;
+        }
+        return /^gemini-[0-9]+(?:\.[0-9]+)*-flash(?:-[a-z0-9.]+)?$/i.test(id) || /^gemini-flash-latest$/i.test(id);
+      })
+      .map((m: Record<string, unknown>) => String(m?.name || "").replace(/^models\//, "").trim());
+
+    const uniqueSorted = Array.from(new Set<string>(filtered)).sort(
+      (a, b) => rankFlashModelId(b) - rankFlashModelId(a)
+    );
+    if (uniqueSorted.length > 0) {
+      discoveredModelsCache.set(cacheKey, { models: uniqueSorted, fetchedAt: Date.now() });
+    }
+    return uniqueSorted;
+  } catch {
+    return [];
+  }
+}
+
 async function callGeminiWithFallback(params: {
   apiKeys: string[];
   geminiModel: string;
@@ -291,44 +349,45 @@ async function callGeminiWithFallback(params: {
   | { ok: true; parsedReview: Record<string, unknown>; modelUsed: string }
   | { ok: false; status: number; error: string }
 > {
-  const fallbackModels = Array.from(
-    new Set([params.geminiModel, "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"].filter(Boolean))
+  const staticModels = Array.from(
+    new Set([params.geminiModel, "gemini-2.5-flash", "gemini-2.5-flash-lite"].filter(Boolean))
   );
 
   let lastStatus = 500;
   let lastErrText = "";
+  const errorSummaries: string[] = [];
 
   for (let keyIdx = 0; keyIdx < params.apiKeys.length; keyIdx++) {
     const apiKey = params.apiKeys[keyIdx];
     let keyExhaustedOrInvalid = false;
+    const triedModels = new Set<string>();
 
-    for (const modelName of fallbackModels) {
+    const runOneModel = async (
+      modelName: string
+    ): Promise<{ ok: true; parsedReview: Record<string, unknown>; modelUsed: string } | { ok: false; timedOut?: boolean }> => {
+      if (triedModels.has(modelName)) return { ok: false };
+      triedModels.add(modelName);
+
       if (params.deadlineMs && Date.now() >= params.deadlineMs - 2500) {
-        return {
-          ok: false,
-          status: 504,
-          error: lastErrText || "Hết thời gian chờ phản hồi từ AI trong phiên xử lý hiện tại."
-        };
+        return { ok: false, timedOut: true };
       }
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-      const generationConfig: Record<string, unknown> = {
-        temperature: 0.25,
-        responseMimeType: "application/json",
-        maxOutputTokens: 8192
-      };
-      if (/^gemini-2\.5/i.test(modelName)) {
-        generationConfig.thinkingConfig = { thinkingBudget: 512 };
-      }
+      let includeThinking = /^gemini-2\.5-flash$/i.test(modelName);
 
       for (let attempt = 0; attempt < 2; attempt++) {
         const remainingBudget = params.deadlineMs ? params.deadlineMs - Date.now() : GEMINI_TIMEOUT_MS;
         if (remainingBudget < 3000) {
-          return {
-            ok: false,
-            status: 504,
-            error: lastErrText || "Hết thời gian chờ phản hồi từ AI."
-          };
+          return { ok: false, timedOut: true };
+        }
+
+        const generationConfig: Record<string, unknown> = {
+          temperature: 0.25,
+          responseMimeType: "application/json",
+          maxOutputTokens: 8192
+        };
+        if (includeThinking) {
+          generationConfig.thinkingConfig = { thinkingBudget: 512 };
         }
 
         const timeoutMs = Math.min(GEMINI_TIMEOUT_MS, remainingBudget);
@@ -356,6 +415,7 @@ async function callGeminiWithFallback(params: {
             if (!rawCandidate) {
               lastStatus = 502;
               lastErrText = `AI (${modelName}) trả về rỗng (${finishReason || "NO_TEXT"}).`;
+              errorSummaries.push(`${modelName}:EMPTY`);
             } else {
               try {
                 const parsedReview = parseModelJson(rawCandidate);
@@ -365,6 +425,7 @@ async function callGeminiWithFallback(params: {
                 lastErrText =
                   `AI (${modelName}, ${finishReason || "OK"}) JSON lỗi: ` +
                   (parseErr instanceof Error ? parseErr.message : String(parseErr));
+                errorSummaries.push(`${modelName}:JSON`);
               }
             }
 
@@ -377,18 +438,22 @@ async function callGeminiWithFallback(params: {
 
           lastStatus = res.status;
           lastErrText = (await res.text().catch(() => "")).slice(0, 240);
+          errorSummaries.push(`${modelName}:${res.status}`);
 
+          if (res.status === 400 && includeThinking && attempt === 0) {
+            // Thử lại ngay cùng model nhưng bỏ thinkingConfig nếu payload bị từ chối
+            includeThinking = false;
+            continue;
+          }
           if (res.status === 401 || res.status === 403) {
             keyExhaustedOrInvalid = true;
             break;
           }
           if (res.status === 400 || res.status === 404) {
-            // Lỗi cấu hình model hoặc model không khả dụng -> chuyển thẳng model kế tiếp
             break;
           }
           if (res.status === 429) {
             if (params.apiKeys.length > 1 && keyIdx < params.apiKeys.length - 1) {
-              // Xoay vòng sang API key dự phòng nếu có nhiều key
               keyExhaustedOrInvalid = true;
               break;
             }
@@ -409,6 +474,7 @@ async function callGeminiWithFallback(params: {
             : err instanceof Error
               ? err.message
               : "Lỗi kết nối tới Gemini API.";
+          errorSummaries.push(`${modelName}:${lastStatus}`);
           if (attempt === 0) {
             await new Promise(r => setTimeout(r, 900 + Math.floor(Math.random() * 600)));
             continue;
@@ -417,14 +483,54 @@ async function callGeminiWithFallback(params: {
         }
       }
 
+      return { ok: false };
+    };
+
+    for (const modelName of staticModels) {
+      const outcome = await runOneModel(modelName);
+      if (outcome.ok) return outcome;
+      if (outcome.timedOut) {
+        return {
+          ok: false,
+          status: 504,
+          error: `[${errorSummaries.join(", ")}] ${lastErrText || "Hết thời gian chờ phản hồi từ AI."}`
+        };
+      }
       if (keyExhaustedOrInvalid) break;
+    }
+
+    if (!keyExhaustedOrInvalid) {
+      const remainingBudget = params.deadlineMs ? params.deadlineMs - Date.now() : GEMINI_TIMEOUT_MS;
+      if (remainingBudget > 4000) {
+        const discovered = await discoverActiveFlashModels(apiKey, remainingBudget);
+        const candidates = discovered.filter(m => !triedModels.has(m)).slice(0, 3);
+        for (const modelName of candidates) {
+          const outcome = await runOneModel(modelName);
+          if (outcome.ok) return outcome;
+          if (outcome.timedOut) {
+            return {
+              ok: false,
+              status: 504,
+              error: `[${errorSummaries.join(", ")}] ${lastErrText || "Hết thời gian chờ phản hồi từ AI."}`
+            };
+          }
+          if (keyExhaustedOrInvalid) break;
+        }
+      }
     }
   }
 
+  const hasRateLimit = errorSummaries.some(s => s.endsWith(":429"));
+  const summaryPrefix = errorSummaries.length > 0 ? `[${errorSummaries.join(", ")}] ` : "";
+  const effectiveStatus = hasRateLimit ? 429 : lastStatus;
+  const friendlyHint = hasRateLimit
+    ? "API tạm hết hạn mức (429) — có thể thêm API key dự phòng vào GEMINI_API_KEYS. "
+    : "";
+
   return {
     ok: false,
-    status: lastStatus,
-    error: `Gemini API lỗi (${lastStatus}): ${lastErrText}`
+    status: effectiveStatus,
+    error: `Gemini API lỗi (${effectiveStatus}): ${summaryPrefix}${friendlyHint}${lastErrText}`
   };
 }
 
