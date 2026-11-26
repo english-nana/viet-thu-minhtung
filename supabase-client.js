@@ -525,7 +525,7 @@
       <div class="ai-review-panel">
         <div class="ai-review-summary">
           <div class="ai-review-badges">
-            <span class="ai-level-badge">Mục tiêu Level ${escapeHtml(targetLevel)}</span>
+            <span class="ai-level-badge">Thang điểm VSTEP 0–10</span>
             ${reviewJson.estimated_band ? `<span class="ai-band-badge">${escapeHtml(reviewJson.estimated_band)}</span>` : ""}
             ${reviewJson.level_assessment ? `<span class="ai-assess-text">${escapeHtml(reviewJson.level_assessment)}</span>` : ""}
           </div>
@@ -561,7 +561,7 @@
           <div class="ai-block-title">2. Chi tiết các lỗi cần sửa (${corrections.length} mục)</div>
           ${
             corrections.length === 0
-              ? `<p class="ai-clean-note">✓ Bài viết không có lỗi ngữ pháp, chính tả, dấu câu hay dùng từ đáng kể ở mức Level ${escapeHtml(targetLevel)}.</p>`
+              ? `<p class="ai-clean-note">✓ Bài viết không có lỗi ngữ pháp, chính tả, dấu câu hay dùng từ đáng kể.</p>`
               : `
               <div class="ai-corr-table-wrap">
                 <table class="ai-corr-table">
@@ -603,7 +603,7 @@
           ideaAdditions.length > 0
             ? `
             <div class="ai-review-block">
-              <div class="ai-block-title">3. Gợi ý bổ sung ý cho đầy đủ hơn (chuẩn Level ${escapeHtml(targetLevel)})</div>
+              <div class="ai-block-title">3. Gợi ý bổ sung ý cho đầy đủ hơn (tham khảo)</div>
               <div class="ai-ideas-list">
                 ${ideaAdditions
                   .map(

@@ -76,11 +76,9 @@ function buildVstepGradingPrompt(params: {
   lessonTitle: string;
   promptText: string;
   content: string;
-  targetLevel: string;
+  targetLevel?: string;
 }) {
   const isTask1 = params.taskType === "task1";
-  const rawLv = String(params.targetLevel || "").trim().toUpperCase();
-  const level: "B1" | "B2" | "C1" = rawLv === "C1" ? "C1" : rawLv === "B2" ? "B2" : "B1";
   const taskLabel = isTask1
     ? "VSTEP Writing Task 1 (Viết Thư / Email — tối thiểu 120 từ, chiếm 1/3 tổng điểm Writing)"
     : "VSTEP Writing Task 2 (Viết Luận / Essay — tối thiểu 250 từ, chiếm 2/3 tổng điểm Writing)";
@@ -109,28 +107,11 @@ ${scaleGuide}
   * Mức 4.0–5.5/10 (B1): Trả lời được một phần hoặc ở mức tối thiểu, phát triển ý còn hạn chế/thiếu ví dụ; có bố cục nhưng mạch tiến triển chưa đều, từ nối còn lặp; từ vựng cơ bản đủ truyền đạt; dùng chủ yếu câu đơn, câu phức hay mắc lỗi nhưng vẫn hiểu được ý chính.
   * Dưới 4.0/10 (Không đạt): Lạc đề hoặc không giải quyết được yêu cầu đề, thiếu mạch lạc, từ vựng quá hạn chế và lỗi ngữ pháp/chính tả dày đặc gây biến dạng nghĩa.`;
 
-  const levelGuidance =
-    level === "C1"
-      ? `Mục tiêu lớp của học viên là trình độ C1 VSTEP (mốc đạt: 9.0 – 9.5/10):
-- Đọc bài theo kỳ vọng chuẩn C1 (độ chính xác ngữ pháp cao, từ vựng học thuật/collocation tự nhiên, văn phong chuẩn xác, lập luận có chiều sâu), nhưng VẪN phải công tâm, động viên, KHÔNG sửa nát bài và KHÔNG bắt lỗi vặt vô lý.
-- Trong "corrections": ưu tiên sửa các lỗi sai thật sự (ngữ pháp, chính tả, sai sắc thái/collocation, diễn đạt lủng củng ảnh hưởng band C1). Chỉ trích cụm ngắn 1–6 từ, gộp các lỗi giống nhau thành 1 mục.
-- Trong "idea_additions" (tối đa 2–3 mục): gợi ý 1–2 câu chuẩn C1 (sắc sảo, collocation tự nhiên, lập luận sâu) để học viên nâng bài lên chạm mốc 9.0–9.5/10.`
-      : level === "B2"
-        ? `Mục tiêu lớp của học viên là trình độ B2 VSTEP (mốc đạt: 6.0 – 8.5/10):
-- Chỉ sửa những lỗi ngữ pháp, chính tả, dấu câu, dùng từ thực sự sai hoặc gây lủng củng/sai sắc thái rõ rệt so với chuẩn B2.
-- KHÔNG ép viết lại câu đang đúng thành văn C1/C2 quá hàn lâm. Nếu câu đã tự nhiên ở mức B2 thì GIỮ NGUYÊN.
-- Trong "idea_additions" (tối đa 2–3 mục): chỉ thêm gợi ý chuẩn B2 khi ý trả lời đề còn thiếu hoặc lập luận/ví dụ còn mỏng so với chuẩn 6.0–8.5.`
-        : `Mục tiêu lớp của học viên là trình độ B1 VSTEP (mốc đạt: 4.0 – 5.5/10):
-- Chỉ cần đúng ngữ pháp cơ bản, rõ nghĩa, đúng chính tả/dấu câu và trả lời đủ ý đề bài.
-- TUYỆT ĐỐI KHÔNG ép dùng từ vựng hay cấu trúc B2/C1. Câu đơn giản nhưng đúng ngữ pháp ở mức B1 thì GIỮ NGUYÊN, KHÔNG SỬA.
-- Trong "idea_additions": chỉ gợi ý câu tiếng Anh đơn giản chuẩn B1 nếu học viên bỏ sót yêu cầu đề hoặc viết quá cụt chưa rõ nghĩa.`;
-
-  return `Bạn là giáo viên chấm bài VSTEP Writing tận tâm, công tâm và giàu kinh nghiệm tại Việt Nam. Hãy chấm điểm sát thực tế kỳ thi VSTEP và sửa bài mang tính xây dựng, động viên để học viên thấy rõ điểm mạnh lẫn chỗ cần cải thiện mà không bị nản lòng.
+  return `Bạn là giáo viên chấm bài VSTEP Writing tận tâm, công tâm và giàu kinh nghiệm tại Việt Nam. Hãy chấm điểm hoàn toàn khách quan theo đúng chất lượng thực tế của bài viết và sửa bài mang tính xây dựng, động viên để học viên thấy rõ điểm mạnh lẫn chỗ cần cải thiện mà không bị nản lòng.
 
 THÔNG TIN BÀI LÀM:
 - Dạng bài: ${taskLabel}
 - Đề / Chủ đề: ${params.lessonTitle}
-- Trình độ mục tiêu (suy từ mã lớp của học viên): Level ${level} VSTEP
 - Đề bài gốc:
 """
 ${params.promptText || "(Không có mô tả đề bài)"}
@@ -144,14 +125,15 @@ ${params.content}
 ${taskScoringRubric}
 
 NGUYÊN TẮC CHẤM ĐIỂM & SỬA BÀI BẮT BUỘC:
-1. CHẤM ĐIỂM CÔNG TÂM, LÀM TRÒN BƯỚC 0.25 & SÁT THỰC TẾ:
-   - Mọi con số điểm PHẢI làm tròn theo bội số 0.25 (ví dụ: 3.5, 4.75, 5.25, 6.75, 7.5, 8.25, 9.0, 9.25).
+1. CHẤM KHÁCH QUAN HOÀN TOÀN THEO THỰC LỰC BÀI VIẾT — KHÔNG ĐẶT GIỚI HẠN TRÌNH ĐỘ:
+   - Không áp trần hay giới hạn B1, B2 hay C1. Bài viết thể hiện đúng ở mức nào thì chấm thẳng mức điểm đó (VD: bài viết rất tốt đạt chuẩn 8.0/10 thì chấm 8.0/10 · B2; bài đạt chuẩn 9.0–9.25/10 thì chấm 9.0–9.25/10 · C1; bài đạt 4.75–5.25/10 thì chấm 4.75–5.25/10 · B1; dưới 4.0 thì ghi Không đạt).
+   - Mọi con số điểm PHẢI làm tròn theo bội số 0.25 (ví dụ: 3.5, 4.75, 5.25, 6.75, 7.5, 8.0, 8.5, 9.0, 9.25).
    - Quy đổi bắt buộc: Dưới 4.0 = Không đạt | 4.0–5.5 = B1 | 6.0–8.5 = B2 | 9.0–9.5 = C1.
-   - Đưa ra KHOẢNG ĐIỂM hợp lý (biên độ khoảng 0.5 điểm) kèm trình độ tương ứng trong "estimated_band", ví dụ: "Không đạt · 3.25 – 3.75/10", "B1 · 4.75 – 5.25/10", "B2 · 7.5 – 8.0/10", "C1 · 9.0 – 9.25/10".
+   - Đưa ra KHOẢNG ĐIỂM hợp lý (biên độ khoảng 0.5 điểm) kèm trình độ tương ứng trong "estimated_band", ví dụ: "Không đạt · 3.25 – 3.75/10", "B1 · 4.75 – 5.25/10", "B2 · 7.75 – 8.25/10", "C1 · 9.0 – 9.25/10".
    - Đánh giá tổng thể theo mức độ hoàn thành nhiệm vụ và khả năng truyền đạt hiệu quả, không chấm quá gắt gao vì 1–2 sơ suất nhỏ.
 2. NGUYÊN TẮC "KHÔNG SỬA NÁT BÀI" & KHÔNG BẮT LỖI VẶT:
    - CHỈ sửa lỗi thực sự sai thuộc 4 nhóm: "Ngữ pháp" (chia động từ, thì, giới từ/mạo từ sai rõ, thiếu thành phần câu, lặp chủ ngữ sai như "or you contact"), "Chính tả" (sai chính tả tiếng Anh/dạng từ), "Dấu câu" (thiếu/sai gây đứt gãy câu), "Từ vựng" (dùng sai nghĩa/sai ngữ cảnh rõ rệt, VD "reliable bank" thay vì "reliable website/platform").
-   - TUYỆT ĐỐI KHÔNG sửa theo sở thích cá nhân khi câu của học viên đã đúng ngữ pháp và tự nhiên ở văn phong tương ứng (VD: KHÔNG sửa bỏ "who" trong "a seller who you have never dealt with", KHÔNG ép đổi "some books" thành "books", KHÔNG ép đổi "make sure" thành "ensure" trong thư thân mật gửi bạn bè, KHÔNG đổi số ít/số nhiều nếu cả hai đều chấp nhận được).
+   - TUYỆT ĐỐI KHÔNG sửa theo sở thích cá nhân khi câu của học viên đã đúng ngữ pháp và tự nhiên ở văn phong tương ứng (VD: KHÔNG sửa bỏ "who" trong "a seller who you have never dealt with", KHÔNG ép đổi "some books" thành "books", KHÔNG ép đổi "make sure" thành "ensure" trong thư thân mật gửi bạn bè, KHÔNG ép biến câu đúng và tự nhiên thành văn C1/C2 quá hàn lâm).
    - Chọn lọc tối đa 3–6 lỗi giá trị nhất cho bài khá/tốt (và tối đa 7–8 lỗi quan trọng nhất cho bài yếu hơn) để học viên dễ tiếp thu.
 3. GẠCH SỬA TỐI GIẢN — TUYỆT ĐỐI KHÔNG GẠCH CẢ CÂU DÀI:
    - Với mỗi mục trong "corrections", trường "original" CHỈ được trích ĐÚNG CỤM TỪ CHỨA LỖI (thường 1 đến 6 từ, chỉ kèm thêm 1–2 từ liền kề nếu cần ngữ cảnh; ví dụ: "shoping" -> "shopping", "a reliable bank" -> "a reliable website", "or you contact" -> "or contact").
@@ -160,16 +142,17 @@ NGUYÊN TẮC CHẤM ĐIỂM & SỬA BÀI BẮT BUỘC:
 4. GỘP CÁC LỖI GIỐNG NHAU THÀNH 1 LỖI:
    - Nếu cùng một loại lỗi lặp lại nhiều lần trong bài (VD: lặp lỗi chính tả tương tự, lặp lỗi chia động từ số ít/số nhiều, lặp cùng 1 lỗi mạo từ), CHỈ TÍNH LÀ 1 LỖI: tạo 1 mục đại diện trong "corrections", giải thích cách khắc phục chung và ghi chú ngắn trong "explanation_vi" (VD: "Lỗi tương tự cũng xuất hiện ở một vài chỗ khác trong bài"), KHÔNG tạo nhiều mục trùng lặp và KHÔNG trừ điểm nhiều lần cho cùng 1 lỗi.
 5. GIỌNG VĂN XÂY DỰNG & ĐỘNG VIÊN:
-   - "overall_comment" luôn bắt đầu bằng 1–2 câu khen ngợi cụ thể điểm làm tốt của bài viết (bố cục, hoàn thành yêu cầu đề, cấu trúc câu hay, từ vựng tự nhiên...), rồi mới gợi ý nhẹ nhàng 1–2 điểm ưu tiên phù hợp với mục tiêu Level ${level} của học viên.
-6. ${levelGuidance}
+   - "overall_comment" luôn bắt đầu bằng 1–2 câu khen ngợi cụ thể điểm làm tốt của bài viết (bố cục, hoàn thành yêu cầu đề, cấu trúc câu hay, từ vựng tự nhiên...), rồi mới gợi ý nhẹ nhàng 1–2 điểm ưu tiên giúp bài viết hay hơn và nâng điểm thực tế.
+6. VỀ PHẦN BỔ SUNG Ý ("idea_additions"):
+   - Đối chiếu bài viết với đề bài gốc. Nếu học viên bỏ sót ý hoặc có ý viết còn mỏng/thiếu giải thích-ví dụ rõ ràng, đề xuất 1–3 mục tự nhiên, sát với trình độ hiện tại của bài (giúp nâng chất lượng bài lên thêm một bậc). Nếu bài đã phát triển ý đầy đủ và thuyết phục, trả về mảng rỗng [].
 7. Trường "revised_version": Giữ nguyên giọng văn, bố cục đoạn và ý tưởng gốc của học viên, chỉ áp dụng các chỗ đã sửa (và chèn nhẹ câu bổ sung nếu thực sự cần). Phân tách các đoạn bằng "\\n\\n".
 
 TRẢ VỀ DUY NHẤT MỘT JSON HỢP LỆ (không thêm markdown hay văn bản ngoài JSON) theo đúng cấu trúc sau:
 {
-  "level_assessment": "Đánh giá ngắn gọn, tích cực so với mục tiêu Level ${level} (VD: Đạt mục tiêu B2 / Gần chạm mốc C1 - diễn đạt tự nhiên và mạch lạc)",
-  "estimated_band": "Khoảng điểm làm tròn 0.25 & trình độ VSTEP (VD: B2 · 7.5 – 8.0/10 hoặc C1 · 9.0 – 9.25/10)",
+  "level_assessment": "Đánh giá ngắn gọn, tích cực đúng thực lực bài viết (VD: Bài viết đạt mức B2 tốt - bố cục rõ ràng và diễn đạt tự nhiên)",
+  "estimated_band": "Khoảng điểm làm tròn 0.25 & trình độ VSTEP thực tế (VD: B2 · 7.75 – 8.25/10 hoặc C1 · 9.0 – 9.25/10)",
   "score_note": "Quy đổi bài thi VSTEP: Điểm Writing = (Task 1 + Task 2 × 2) ÷ 3 (${isTask1 ? "Task 1 chiếm 1/3 trọng số" : "Task 2 chiếm 2/3 trọng số"}) · Làm tròn 0.25",
-  "overall_comment": "2-3 câu nhận xét mang tính xây dựng & động viên: khen cụ thể điểm làm tốt trước, sau đó gợi ý 1-2 điểm quan trọng nhất phù hợp mục tiêu Level ${level}.",
+  "overall_comment": "2-3 câu nhận xét mang tính xây dựng & động viên: khen cụ thể điểm làm tốt trước, sau đó gợi ý 1-2 điểm quan trọng nhất để nâng điểm.",
   "criteria": {
     "task_fulfillment": "Nhận xét ngắn gọn tiếng Việt về mức độ hoàn thành yêu cầu đề & văn phong",
     "organization": "Nhận xét ngắn gọn về bố cục đoạn và liên kết câu",
@@ -188,8 +171,8 @@ TRẢ VỀ DUY NHẤT MỘT JSON HỢP LỆ (không thêm markdown hay văn bả
   "idea_additions": [
     {
       "where_vi": "Vị trí nên bổ sung (nếu cần)",
-      "issue_vi": "Ý này đang thiếu gì hoặc có thể mở rộng thêm điểm nào cho mục tiêu Level ${level}",
-      "suggested_sentences_en": "1-2 câu tiếng Anh đúng trình độ ${level} để học viên tham khảo",
+      "issue_vi": "Ý này đang thiếu gì hoặc có thể mở rộng thêm điểm nào",
+      "suggested_sentences_en": "1-2 câu tiếng Anh tự nhiên, rõ nghĩa để học viên tham khảo",
       "meaning_vi": "Nghĩa tiếng Việt của câu gợi ý"
     }
   ],
