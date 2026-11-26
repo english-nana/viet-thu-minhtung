@@ -321,10 +321,10 @@ async function discoverActiveFlashModels(apiKey: string, timeoutMs: number): Pro
         const id = String(m?.name || "").replace(/^models\//, "").trim();
         if (!id) return false;
         if (/^gemini-(?:1\.|2\.0)/i.test(id)) return false;
-        if (/(?:tts|audio|image|live|embedding|robotics|computer-use|vision|thinking-exp|native-audio)/i.test(id)) {
+        if (/(?:tts|audio|image|live|embedding|robotics|computer-use|vision|thinking-exp|native-audio|omni)/i.test(id)) {
           return false;
         }
-        return /^gemini-[0-9]+(?:\.[0-9]+)*-flash(?:-[a-z0-9.]+)?$/i.test(id) || /^gemini-flash-latest$/i.test(id);
+        return /^gemini-[0-9]+(?:\.[0-9]+)*-flash(?:-[a-z0-9.]+)?$/i.test(id) || /^gemini-flash(?:-lite)?-latest$/i.test(id);
       })
       .map((m: Record<string, unknown>) => String(m?.name || "").replace(/^models\//, "").trim());
 
@@ -350,20 +350,35 @@ async function callGeminiWithFallback(params: {
   | { ok: false; status: number; error: string }
 > {
   const staticModels = Array.from(
-    new Set([params.geminiModel, "gemini-2.5-flash", "gemini-2.5-flash-lite"].filter(Boolean))
+    new Set(
+      [
+        params.geminiModel,
+        "gemini-3.8-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemini-2.5-flash"
+      ].filter(Boolean)
+    )
   );
+
+  // Chia tải ngẫu nhiên giữa các API key ngay từ đầu để tránh dồn vào 1 key
+  const keyCount = params.apiKeys.length;
+  const startOffset = keyCount > 1 ? Math.floor(Math.random() * keyCount) : 0;
+  const rotatedKeys = Array.from({ length: keyCount }, (_, i) => params.apiKeys[(startOffset + i) % keyCount]);
 
   let lastStatus = 500;
   let lastErrText = "";
   const errorSummaries: string[] = [];
 
-  for (let keyIdx = 0; keyIdx < params.apiKeys.length; keyIdx++) {
-    const apiKey = params.apiKeys[keyIdx];
+  for (let keyIdx = 0; keyIdx < rotatedKeys.length; keyIdx++) {
+    const apiKey = rotatedKeys[keyIdx];
     let keyExhaustedOrInvalid = false;
     const triedModels = new Set<string>();
 
     const runOneModel = async (
-      modelName: string
+      modelName: string,
+      hasFallbackAfter: boolean
     ): Promise<{ ok: true; parsedReview: Record<string, unknown>; modelUsed: string } | { ok: false; timedOut?: boolean }> => {
       if (triedModels.has(modelName)) return { ok: false };
       triedModels.add(modelName);
@@ -374,9 +389,11 @@ async function callGeminiWithFallback(params: {
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
       let includeThinking = /^gemini-2\.5-flash$/i.test(modelName);
+      const isLiteModel = /lite/i.test(modelName);
+      const modelTimeoutCap = !isLiteModel && hasFallbackAfter ? 12000 : 20000;
 
       for (let attempt = 0; attempt < 2; attempt++) {
-        const remainingBudget = params.deadlineMs ? params.deadlineMs - Date.now() : GEMINI_TIMEOUT_MS;
+        const remainingBudget = params.deadlineMs ? params.deadlineMs - Date.now() : modelTimeoutCap;
         if (remainingBudget < 3000) {
           return { ok: false, timedOut: true };
         }
@@ -390,7 +407,7 @@ async function callGeminiWithFallback(params: {
           generationConfig.thinkingConfig = { thinkingBudget: 512 };
         }
 
-        const timeoutMs = Math.min(GEMINI_TIMEOUT_MS, remainingBudget);
+        const timeoutMs = Math.min(modelTimeoutCap, remainingBudget);
 
         try {
           const res = await fetchWithTimeout(
@@ -430,7 +447,7 @@ async function callGeminiWithFallback(params: {
             }
 
             if (attempt === 0) {
-              await new Promise(r => setTimeout(r, 800 + Math.floor(Math.random() * 600)));
+              await new Promise(r => setTimeout(r, 500 + Math.floor(Math.random() * 400)));
               continue;
             }
             break;
@@ -441,7 +458,6 @@ async function callGeminiWithFallback(params: {
           errorSummaries.push(`${modelName}:${res.status}`);
 
           if (res.status === 400 && includeThinking && attempt === 0) {
-            // Thử lại ngay cùng model nhưng bỏ thinkingConfig nếu payload bị từ chối
             includeThinking = false;
             continue;
           }
@@ -449,22 +465,12 @@ async function callGeminiWithFallback(params: {
             keyExhaustedOrInvalid = true;
             break;
           }
-          if (res.status === 400 || res.status === 404) {
+          if (res.status === 429 && rotatedKeys.length > 1 && keyIdx < rotatedKeys.length - 1) {
+            // Đổi ngay sang key kế tiếp khi chạm 429
+            keyExhaustedOrInvalid = true;
             break;
           }
-          if (res.status === 429) {
-            if (params.apiKeys.length > 1 && keyIdx < params.apiKeys.length - 1) {
-              keyExhaustedOrInvalid = true;
-              break;
-            }
-          }
-          if ((res.status === 503 || res.status === 429 || res.status === 500 || res.status === 502 || res.status === 504) && attempt === 0) {
-            const retryAfterSec = Number(res.headers.get("retry-after") || "0");
-            const baseDelay = retryAfterSec > 0 && retryAfterSec <= 4 ? retryAfterSec * 1000 : 1000;
-            const jitter = Math.floor(Math.random() * 900);
-            await new Promise(r => setTimeout(r, baseDelay + jitter));
-            continue;
-          }
+          // Với 503/504/404/400/429 ở model đơn lẻ -> chuyển thẳng sang model dự phòng kế tiếp không chờ lâu
           break;
         } catch (err) {
           const isAbort = err instanceof Error && err.name === "AbortError";
@@ -475,10 +481,6 @@ async function callGeminiWithFallback(params: {
               ? err.message
               : "Lỗi kết nối tới Gemini API.";
           errorSummaries.push(`${modelName}:${lastStatus}`);
-          if (attempt === 0) {
-            await new Promise(r => setTimeout(r, 900 + Math.floor(Math.random() * 600)));
-            continue;
-          }
           break;
         }
       }
@@ -486,8 +488,8 @@ async function callGeminiWithFallback(params: {
       return { ok: false };
     };
 
-    for (const modelName of staticModels) {
-      const outcome = await runOneModel(modelName);
+    for (let mIdx = 0; mIdx < staticModels.length; mIdx++) {
+      const outcome = await runOneModel(staticModels[mIdx], mIdx < staticModels.length - 1);
       if (outcome.ok) return outcome;
       if (outcome.timedOut) {
         return {
@@ -504,8 +506,8 @@ async function callGeminiWithFallback(params: {
       if (remainingBudget > 4000) {
         const discovered = await discoverActiveFlashModels(apiKey, remainingBudget);
         const candidates = discovered.filter(m => !triedModels.has(m)).slice(0, 3);
-        for (const modelName of candidates) {
-          const outcome = await runOneModel(modelName);
+        for (let cIdx = 0; cIdx < candidates.length; cIdx++) {
+          const outcome = await runOneModel(candidates[cIdx], cIdx < candidates.length - 1);
           if (outcome.ok) return outcome;
           if (outcome.timedOut) {
             return {
@@ -1189,7 +1191,7 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const apiKeys = parseGeminiApiKeys();
-    const geminiModel = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+    const geminiModel = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
     const cronSecretEnv = Deno.env.get("CRON_SECRET") || "";
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
