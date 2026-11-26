@@ -1,7 +1,7 @@
 // ============================================================================
 // SUPABASE EDGE FUNCTION: grade-writing
 // Chấm & sửa bài viết VSTEP Task 01 (Thư/Email) & Task 02 (Luận) theo B1 / B2,
-// hẹn trả bài sửa sau 12 tiếng, và hỗ trợ hàng đợi tự động chấm lại (pg_cron)
+// hẹn trả bài sửa chậm nhất sau 6 giờ, và hỗ trợ hàng đợi tự động chấm lại (pg_cron)
 // mỗi 5 phút khi AI quá tải (503 / 429) để đảm bảo 100% bài đều xong trước hạn!
 //
 // Triển khai trên Supabase Dashboard (không cần cài CLI):
@@ -20,7 +20,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
-const RELEASE_DELAY_HOURS = 12;
+const RELEASE_DELAY_HOURS = 6;
 const MAX_STUDENT_GRADES_PER_LESSON = 5;
 const MAX_AUTO_RETRIES = 20;
 const RETRY_COOLDOWN_MS = 90 * 1000;
@@ -182,13 +182,17 @@ async function gradeSingleSubmission(
   const submittedMs = new Date(sub.submitted_at || nowMs).getTime();
   const baseSubmitMs = isNaN(submittedMs) ? nowMs : submittedMs;
 
-  let releaseAtIso = new Date(baseSubmitMs + RELEASE_DELAY_HOURS * 60 * 60 * 1000).toISOString();
+  const maxReleaseMs = baseSubmitMs + RELEASE_DELAY_HOURS * 60 * 60 * 1000;
+  const maxReleaseIso = new Date(maxReleaseMs).toISOString();
+  let releaseAtIso = maxReleaseIso;
   if (options.isTeacherOrCron && options.releaseNow) {
     releaseAtIso = nowIso;
   } else if (existingReview?.release_at) {
-    releaseAtIso = existingReview.release_at;
+    const existingMs = new Date(existingReview.release_at).getTime();
+    releaseAtIso = !isNaN(existingMs) && existingMs <= maxReleaseMs ? existingReview.release_at : maxReleaseIso;
   } else if (sub.ai_release_at) {
-    releaseAtIso = sub.ai_release_at;
+    const subRelMs = new Date(sub.ai_release_at).getTime();
+    releaseAtIso = !isNaN(subRelMs) && subRelMs <= maxReleaseMs ? sub.ai_release_at : maxReleaseIso;
   }
 
   await admin

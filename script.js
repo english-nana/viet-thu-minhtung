@@ -293,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 markReviewAsSeen(sub.lesson_id);
             }
         } else {
-            const releaseAt = sub.ai_release_at || (sub.submitted_at ? new Date(new Date(sub.submitted_at).getTime() + 12 * 60 * 60 * 1000).toISOString() : '');
+            const releaseAt = sub.ai_release_at || (sub.submitted_at ? new Date(new Date(sub.submitted_at).getTime() + 6 * 60 * 60 * 1000).toISOString() : '');
             const remainText = CLOUD && releaseAt ? CLOUD.formatRemainingTime(releaseAt) : '';
             const releaseFormatted = releaseAt ? fmtTime(releaseAt) : '';
 
@@ -305,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="writing-schedule-pill">Còn ${esc(remainText)}</span>
                         </div>
                         <p class="writing-schedule-desc">
-                            Bài sửa chi tiết (ngữ pháp, chính tả, dấu câu, từ vựng &amp; bổ sung ý theo chuẩn <strong>Level ${esc(sub.target_level || 'B1')}</strong>) sẽ được gửi vào tài khoản của bạn sau 12 tiếng — dự kiến lúc <strong>${esc(releaseFormatted)}</strong>. Bạn sẽ nhận được thông báo ở biểu tượng chuông 🔔 trên góc phải khi có bài sửa.
+                            Bài sửa chi tiết (ngữ pháp, chính tả, dấu câu, từ vựng &amp; bổ sung ý theo chuẩn <strong>Level ${esc(sub.target_level || 'B1')}</strong>) sẽ được gửi vào tài khoản của bạn chậm nhất sau 6 giờ — dự kiến lúc <strong>${esc(releaseFormatted)}</strong>. Bạn sẽ nhận được thông báo ở biểu tượng chuông 🔔 trên góc phải khi có bài sửa.
                         </p>
                     </div>
                 `);
@@ -333,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const nowMs = Date.now();
         const nowIso = new Date(nowMs).toISOString();
-        const defaultReleaseIso = new Date(nowMs + 12 * 60 * 60 * 1000).toISOString();
+        const defaultReleaseIso = new Date(nowMs + 6 * 60 * 60 * 1000).toISOString();
         const rowId = `${currentAccount.id}__${lessonId}`;
         const existing = getCloudSubmission(lessonId);
 
@@ -369,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 .eq('id', currentAccount.id);
         } catch (e) {}
 
-        // Xóa cache bài sửa cũ (nếu học viên nộp lại bản mới) để chờ đợt trả bài mới sau 12 tiếng
+        // Xóa cache bài sửa cũ (nếu học viên nộp lại bản mới) để chờ đợt trả bài mới chậm nhất sau 6 giờ
         delete authState.reviewsByLessonId[lessonId];
 
         const savedRow = {
@@ -381,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         authState.submissionsByLessonId[lessonId] = savedRow;
 
-        // Kích hoạt Edge Function chấm & hẹn trả bài sửa sau 12 tiếng ở nền
+        // Kích hoạt Edge Function chấm & hẹn trả bài sửa chậm nhất sau 6 giờ ở nền
         if (CLOUD && typeof CLOUD.invokeGradeWriting === 'function') {
             CLOUD.invokeGradeWriting(rowId).then(gradeRes => {
                 if (gradeRes && gradeRes.ok && gradeRes.release_at) {
@@ -3455,7 +3455,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (releasedList.length === 0 && pendingList.length === 0) {
                 topbarNotifList.innerHTML = `
                     <div class="notif-empty-state">
-                        Chưa có bài sửa nào.<br />Khi bạn nộp bài Task 01 hoặc Task 02, bài sửa chi tiết sẽ tự động được gửi vào đây sau 12 tiếng.
+                        Chưa có bài sửa nào.<br />Khi bạn nộp bài Task 01 hoặc Task 02, bài sửa chi tiết sẽ tự động được gửi vào đây chậm nhất sau 6 giờ.
                     </div>
                 `;
             } else {
@@ -3645,7 +3645,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ? `<span class="notif-item-tag new-dot">Mới · Đã có bài sửa</span>`
                     : `<span class="notif-item-tag">✅ Đã có bài sửa</span>`;
             } else {
-                const relAt = sub.ai_release_at || (sub.submitted_at ? new Date(new Date(sub.submitted_at).getTime() + 12 * 60 * 60 * 1000).toISOString() : '');
+                const relAt = sub.ai_release_at || (sub.submitted_at ? new Date(new Date(sub.submitted_at).getTime() + 6 * 60 * 60 * 1000).toISOString() : '');
                 const remain = relAt ? CLOUD.formatRemainingTime(relAt) : '';
                 statusPillHtml = remain
                     ? `<span class="notif-item-tag" style="background:#FEF3C7;color:#92400E;">⏳ Trả bài sửa sau ${esc(remain)}</span>`

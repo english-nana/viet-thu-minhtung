@@ -13,7 +13,7 @@
     href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="./style.css?v=3.7" />
+  <link rel="stylesheet" href="./style.css?v=3.8" />
 </head>
 <body>
   <div id="teacher-app"></div>
@@ -25,7 +25,7 @@
       const CLOUD = window.WritingCloud;
       const LESSONS = CLOUD.LESSONS_CATALOG || [];
       const escapeHtml = CLOUD.escapeHtml;
-      const RELEASE_HOURS = 12;
+      const RELEASE_HOURS = 6;
 
       const TASKS_CATALOG = [
         { id: "task1", label: "Task 01 · Viết Thư", shortLabel: "Task 01" },
@@ -62,7 +62,6 @@
         dbError: "",
         students: [],
         submissions: [],
-        searchNameQuery: "",
         filterClass: "all", // "all" | CLASS_LIST... | "unassigned"
         filterLevel: "all", // "all" | "B1" | "B2"
         filterTask: "all", // "all" | "task1" | "task2"
@@ -467,21 +466,12 @@
       }
 
       // ======================================================================
-      // FILTERING LOGIC (HỌ TÊN, LỚP, TRÌNH ĐỘ, PHẦN THI, ĐỀ / CHỦ ĐỀ)
+      // FILTERING LOGIC (LỚP, TRÌNH ĐỘ, PHẦN THI, ĐỀ / CHỦ ĐỀ)
       // ======================================================================
       function matchesClassFilter(clsName) {
         if (tState.filterClass === "all") return true;
         if (tState.filterClass === "unassigned") return !clsName;
         return clsName === tState.filterClass;
-      }
-
-      function matchesNameFilter(name, email) {
-        const q = tState.searchNameQuery.trim().toLowerCase();
-        if (!q) return true;
-        return (
-          String(name || "").toLowerCase().includes(q) ||
-          String(email || "").toLowerCase().includes(q)
-        );
       }
 
       function matchesTaskFilter(taskType) {
@@ -551,9 +541,7 @@
           tState.filterLesson !== "all";
 
         return tState.students
-          .filter(
-            st => matchesClassFilter(st.className) && matchesNameFilter(st.name, st.email)
-          )
+          .filter(st => matchesClassFilter(st.className))
           .map(st => ({
             ...st,
             metrics: getStudentScopedMetrics(st.id)
@@ -566,7 +554,6 @@
           if (studentId) {
             if (sub.studentId !== studentId) return false;
           } else {
-            if (!matchesNameFilter(sub.studentName, sub.studentEmail)) return false;
             if (!matchesClassFilter(sub.studentClass)) return false;
           }
           if (!matchesTaskFilter(sub.taskType)) return false;
@@ -589,7 +576,6 @@
           );
         }
         return (
-          Boolean(tState.searchNameQuery.trim()) ||
           tState.filterClass !== "all" ||
           tState.filterLevel !== "all" ||
           tState.filterTask !== "all" ||
@@ -835,15 +821,6 @@
               ${
                 !includeSubmissionStatus
                   ? `
-                <input
-                  type="text"
-                  id="inp-filter-name"
-                  class="form-input teacher-filter-item"
-                  aria-label="Tìm theo họ tên hoặc email"
-                  placeholder="🔍 Tìm họ tên / email..."
-                  value="${escapeHtml(tState.searchNameQuery)}"
-                />
-
                 <select id="sel-filter-class" class="form-input teacher-filter-item" aria-label="Lọc theo lớp">
                   <option value="all" ${tState.filterClass === "all" ? "selected" : ""}>Tất cả lớp</option>
                   ${CLOUD.CLASS_LIST.map(
@@ -1030,8 +1007,8 @@
                     const isReleasing = tState.releasingSubId === sub.submissionId;
                     const hasReadyReview = Boolean(rev && rev.status === "ready" && rev.review_json);
                     const relMs = rev && rev.release_at ? new Date(rev.release_at).getTime() : 0;
-                    const isWaiting12h = hasReadyReview && relMs > Date.now();
-                    const remain = isWaiting12h ? CLOUD.formatRemainingTime(rev.release_at) : "";
+                    const isWaitingRelease = hasReadyReview && relMs > Date.now();
+                    const remain = isWaitingRelease ? CLOUD.formatRemainingTime(rev.release_at) : "";
                     const errCount =
                       hasReadyReview && Array.isArray(rev.review_json.corrections)
                         ? rev.review_json.corrections.length
@@ -1046,7 +1023,7 @@
                       !hasReadyReview && scheduledReleaseMs > 0 && scheduledReleaseMs <= Date.now();
 
                     let statusHtml = `<span style="font-size:12.5px;color:#52525B;">Chưa có bài sửa chi tiết AI.</span>`;
-                    if (hasReadyReview && isWaiting12h) {
+                    if (hasReadyReview && isWaitingRelease) {
                       statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đã chấm xong · Hẹn trả lúc ${escapeHtml(CLOUD.formatDateTime(rev.release_at))} (còn ${escapeHtml(remain)})</span>`;
                     } else if (hasReadyReview) {
                       statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#166534;">✅ Đã trả bài sửa (${escapeHtml(CLOUD.formatDateTime(rev.release_at))}) · ${rev.student_seen_at ? "✓ Học viên đã đọc" : "● Học viên chưa đọc"}</span>`;
@@ -1057,9 +1034,9 @@
                         : "";
                       statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B45309;">🔄 Hệ thống đang chờ chấm lại (lần thử ${tries}/20)${errDetail}</span>`;
                     } else if (isOverdueUngraded) {
-                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B91C1C;">⚠️ Đã quá hạn ${RELEASE_HOURS} tiếng nhưng chưa có bài sửa — bấm “Tạo bài sửa” để chấm ngay.</span>`;
+                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B91C1C;">⚠️ Đã quá hạn ${RELEASE_HOURS} giờ nhưng chưa có bài sửa — bấm “Tạo bài sửa” để chấm ngay.</span>`;
                     } else if (sub.aiStatus === "pending" || sub.aiStatus === "pending_retry") {
-                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đang trong hàng đợi chấm tự động (trả sau ${RELEASE_HOURS} tiếng).</span>`;
+                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đang trong hàng đợi chấm tự động (trả chậm nhất sau ${RELEASE_HOURS} giờ).</span>`;
                     }
 
                     return `
@@ -1099,7 +1076,7 @@
                           <div>${statusHtml}</div>
                           <div class="teacher-ai-actions">
                             ${
-                              isWaiting12h
+                              isWaitingRelease
                                 ? `<button type="button" class="top-pill-btn yellow" data-release-now="${escapeHtml(sub.submissionId)}" ${isReleasing ? "disabled" : ""}>
                                     ${isReleasing ? "Đang trả..." : "⚡ Trả bài sửa ngay"}
                                   </button>`
@@ -1472,7 +1449,6 @@
         if (btnResetFilters) {
           btnResetFilters.onclick = () => {
             if (!tState.selectedStudentId) {
-              tState.searchNameQuery = "";
               tState.filterClass = "all";
             }
             tState.filterLevel = "all";
@@ -1518,20 +1494,6 @@
             );
           };
         });
-
-        const inpFilterName = document.getElementById("inp-filter-name");
-        if (inpFilterName) {
-          inpFilterName.oninput = e => {
-            tState.searchNameQuery = e.target.value;
-            const pos = e.target.selectionStart;
-            renderTeacherApp();
-            const nextInp = document.getElementById("inp-filter-name");
-            if (nextInp) {
-              nextInp.focus();
-              nextInp.setSelectionRange(pos, pos);
-            }
-          };
-        }
 
         const selFilterClass = document.getElementById("sel-filter-class");
         if (selFilterClass) {

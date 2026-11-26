@@ -4171,7 +4171,7 @@ footer {
 }
 
 /* ==========================================================================
-   NOTIFICATION BELL & DROPDOWN (12-HOUR REVIEW ALERTS)
+   NOTIFICATION BELL & DROPDOWN (6-HOUR REVIEW ALERTS)
    ========================================================================== */
 
 .notif-menu-wrap {
@@ -5762,7 +5762,7 @@ footer {
 
 .teacher-filter-controls {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
     gap: 8px;
     width: 100%;
 }

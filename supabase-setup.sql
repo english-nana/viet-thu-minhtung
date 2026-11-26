@@ -4,7 +4,7 @@
 -- An toàn khi chạy trên cùng dự án Supabase với Speaking Part 1:
 -- - Giữ nguyên toàn bộ bảng teachers, profiles, speaking_attempts hiện có
 -- - Bổ sung bảng public.writing_submissions & public.writing_ai_reviews
--- - Bảo mật 12 tiếng ở tầng Database (RLS): học viên chỉ đọc được bài sửa
+-- - Bảo mật 6 giờ ở tầng Database (RLS): học viên chỉ đọc được bài sửa
 --   khi release_at <= now(), còn Giáo viên xem được ngay lập tức
 --
 -- Cách chạy:
@@ -156,7 +156,7 @@ create policy "Writing: student delete own or teacher delete"
   on public.writing_submissions for delete
   using (auth.uid() = user_id or public.is_teacher());
 
--- Bảo vệ cột điểm, nhận xét giáo viên và tự động đưa bài mới/bài nộp lại vào hàng đợi chấm 12 tiếng
+-- Bảo vệ cột điểm, nhận xét giáo viên và tự động đưa bài mới/bài nộp lại vào hàng đợi chấm 6 giờ
 create or replace function public.protect_writing_teacher_fields()
 returns trigger
 language plpgsql
@@ -169,7 +169,7 @@ begin
       new.teacher_feedback := '';
       new.teacher_score := '';
       new.ai_status := 'pending';
-      new.ai_release_at := coalesce(new.submitted_at, now()) + interval '12 hours';
+      new.ai_release_at := coalesce(new.submitted_at, now()) + interval '6 hours';
     else
       new.teacher_feedback := old.teacher_feedback;
       new.teacher_score := old.teacher_score;
@@ -177,7 +177,7 @@ begin
          or new.submitted_at is distinct from old.submitted_at
          or new.target_level is distinct from old.target_level then
         new.ai_status := 'pending';
-        new.ai_release_at := coalesce(new.submitted_at, now()) + interval '12 hours';
+        new.ai_release_at := coalesce(new.submitted_at, now()) + interval '6 hours';
         update public.writing_ai_reviews
         set status = 'pending',
             retry_count = 0,
@@ -201,7 +201,7 @@ create trigger trg_protect_writing_teacher_fields
   before insert or update on public.writing_submissions
   for each row execute procedure public.protect_writing_teacher_fields();
 
--- 4. BẢNG BÀI SỬA CHI TIẾT & HẸN GIỜ TRẢ SAU 12 TIẾNG + THÔNG BÁO
+-- 4. BẢNG BÀI SỬA CHI TIẾT & HẸN GIỜ TRẢ CHẬM NHẤT SAU 6 GIỜ + THÔNG BÁO
 create table if not exists public.writing_ai_reviews (
   submission_id text primary key references public.writing_submissions(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -210,7 +210,7 @@ create table if not exists public.writing_ai_reviews (
   lesson_title text not null default '',
   target_level text not null default 'B1',
   status text not null default 'pending',
-  release_at timestamptz not null default (now() + interval '12 hours'),
+  release_at timestamptz not null default (now() + interval '6 hours'),
   review_json jsonb,
   error_message text not null default '',
   grade_count int not null default 1,
@@ -223,12 +223,15 @@ create table if not exists public.writing_ai_reviews (
 alter table public.writing_ai_reviews
   add column if not exists retry_count int not null default 0;
 
+alter table public.writing_ai_reviews
+  alter column release_at set default (now() + interval '6 hours');
+
 create index if not exists idx_writing_ai_reviews_user_release
   on public.writing_ai_reviews (user_id, release_at desc);
 
 alter table public.writing_ai_reviews enable row level security;
 
--- Học viên CHỈ được đọc bài sửa khi đã tới hạn 12 tiếng (release_at <= now()); Giáo viên đọc được ngay
+-- Học viên CHỈ được đọc bài sửa khi đã tới hạn 6 giờ (release_at <= now()); Giáo viên đọc được ngay
 drop policy if exists "AI Reviews: teacher read all or student read after release" on public.writing_ai_reviews;
 create policy "AI Reviews: teacher read all or student read after release"
   on public.writing_ai_reviews for select
@@ -264,7 +267,7 @@ begin
 end;
 $$;
 
--- Giáo viên có thể bấm trả bài sửa sớm hơn 12 tiếng bất cứ lúc nào
+-- Giáo viên có thể bấm trả bài sửa sớm hơn 6 giờ bất cứ lúc nào
 create or replace function public.teacher_release_review_now(p_submission_id text)
 returns void
 language plpgsql
