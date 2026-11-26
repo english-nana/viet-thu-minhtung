@@ -13,13 +13,13 @@
     href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="./style.css?v=3.8" />
+  <link rel="stylesheet" href="./style.css?v=4.6" />
 </head>
 <body>
   <div id="teacher-app"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="./supabase-config.js?v=4.4"></script>
-  <script src="./supabase-client.js?v=4.4"></script>
+  <script src="./supabase-config.js?v=4.6"></script>
+  <script src="./supabase-client.js?v=4.9"></script>
   <script>
     (function () {
       const CLOUD = window.WritingCloud;
@@ -35,7 +35,8 @@
       const LEVEL_FILTER_OPTIONS = [
         { value: "all", label: "Tất cả trình độ" },
         { value: "B1", label: "Mục tiêu B1" },
-        { value: "B2", label: "Mục tiêu B2" }
+        { value: "B2", label: "Mục tiêu B2" },
+        { value: "C1", label: "Mục tiêu C1" }
       ];
 
       const lessonById = {};
@@ -58,10 +59,17 @@
         gradingSubId: "",
         releasingSubId: "",
         flushingQueue: false,
+        flushProgressText: "",
         authError: "",
         dbError: "",
         students: [],
         submissions: [],
+        submissionsByStudentId: {},
+        reviewJsonBySubId: {},
+        loadedReviewStudents: new Set(),
+        loadingReviewStudentId: "",
+        openDetailsSubIds: new Set(),
+        draftGradesBySubId: {},
         filterClass: "all", // "all" | CLASS_LIST... | "unassigned"
         filterLevel: "all", // "all" | "B1" | "B2"
         filterTask: "all", // "all" | "task1" | "task2"
@@ -69,6 +77,9 @@
         filterStatus: "all", // "all" | "unread_review" | "ungraded" | "graded"
         savedToastId: ""
       };
+
+      let verifyingUserId = null;
+      let refreshInFlight = false;
 
       function isHiddenAdminAccount(email, rawName, userId) {
         const lowerEmail = String(email || "").trim().toLowerCase();
@@ -95,13 +106,38 @@
 
       function getBandToneClass(bandText) {
         const lower = String(bandText || "").toLowerCase();
-        if (lower.includes("chưa đạt") || lower.includes("dưới") || /\ba[12]\b/.test(lower)) {
+        if (
+          lower.includes("không đạt") ||
+          lower.includes("chưa đạt") ||
+          lower.includes("dưới") ||
+          /\ba[12]\b/.test(lower)
+        ) {
           return "band-below";
         }
         if (lower.includes("xấp xỉ") || lower.includes("gần")) {
           return "band-approx";
         }
         return "band-achieved";
+      }
+
+      function captureDraftGradesFromDom() {
+        document.querySelectorAll("[data-save-grade]").forEach(btn => {
+          const subId = btn.getAttribute("data-save-grade");
+          if (!subId) return;
+          const scoreInp = document.getElementById("inp-score-" + subId);
+          const fbInp = document.getElementById("inp-fb-" + subId);
+          if (!scoreInp && !fbInp) return;
+          const sub = tState.submissions.find(s => s.submissionId === subId);
+          const scoreVal = scoreInp ? scoreInp.value : "";
+          const fbVal = fbInp ? fbInp.value : "";
+          const origScore = sub ? sub.teacherScore || "" : "";
+          const origFb = sub ? sub.teacherFeedback || "" : "";
+          if (scoreVal !== origScore || fbVal !== origFb) {
+            tState.draftGradesBySubId[subId] = { score: scoreVal, feedback: fbVal };
+          } else {
+            delete tState.draftGradesBySubId[subId];
+          }
+        });
       }
 
       // ======================================================================
@@ -114,173 +150,275 @@
           renderTeacherApp();
           return;
         }
+        if (verifyingUserId === user.id) return;
+        verifyingUserId = user.id;
 
-        tState.checkingAuth = true;
-        tState.loading = true;
-        tState.authError = "";
-        tState.unauthorizedEmail = "";
-        renderTeacherApp();
-
-        const { data: isTeacherFlag, error: rpcError } = await client.rpc("is_teacher");
-        if (rpcError || !isTeacherFlag) {
-          tState.checkingAuth = false;
-          tState.loading = false;
-          tState.authenticated = false;
-          tState.unauthorizedEmail = user.email || "";
+        try {
+          tState.checkingAuth = true;
+          tState.loading = true;
+          tState.authError = "";
+          tState.unauthorizedEmail = "";
           renderTeacherApp();
+
+          const { data: isTeacherFlag, error: rpcError } = await client.rpc("is_teacher");
+          if (rpcError || !isTeacherFlag) {
+            tState.checkingAuth = false;
+            tState.loading = false;
+            tState.authenticated = false;
+            tState.unauthorizedEmail = user.email || "";
+            renderTeacherApp();
+            return;
+          }
+
+          tState.checkingAuth = false;
+          tState.authenticated = true;
+          tState.teacherEmail = user.email || "";
+          tState.teacherUserId = user.id || "";
+          await refreshCloudDashboardData();
+        } finally {
+          if (verifyingUserId === user.id) {
+            verifyingUserId = null;
+          }
+        }
+      }
+
+      async function fetchLightReviewsPaginated(client) {
+        const lightCols =
+          "submission_id, user_id, task_type, lesson_id, lesson_title, target_level, status, release_at, error_message, grade_count, retry_count, student_seen_at, updated_at, estimated_band:review_json->>estimated_band";
+        const lightRes = await CLOUD.fetchAllPages(
+          () => client.from("writing_ai_reviews").select(lightCols).order("submission_id", { ascending: true }),
+          1000
+        );
+        if (!lightRes.error) {
+          return lightRes;
+        }
+        // Fallback nếu bản PostgREST/schema cũ không hỗ trợ JSON projection
+        return CLOUD.fetchAllPages(
+          () => client.from("writing_ai_reviews").select("*").order("submission_id", { ascending: true }),
+          1000
+        );
+      }
+
+      async function ensureStudentReviewsLoaded(studentId) {
+        const client = CLOUD.getClient();
+        if (!client || !studentId) return;
+        if (tState.loadedReviewStudents.has(studentId) || tState.loadingReviewStudentId === studentId) {
           return;
         }
+        tState.loadingReviewStudentId = studentId;
+        renderTeacherApp();
 
-        tState.checkingAuth = false;
-        tState.authenticated = true;
-        tState.teacherEmail = user.email || "";
-        tState.teacherUserId = user.id || "";
-        await refreshCloudDashboardData();
+        try {
+          const { data, error } = await client
+            .from("writing_ai_reviews")
+            .select("submission_id, review_json")
+            .eq("user_id", studentId);
+
+          if (!error && Array.isArray(data)) {
+            data.forEach(row => {
+              if (row && row.submission_id && row.review_json) {
+                tState.reviewJsonBySubId[row.submission_id] = row.review_json;
+              }
+            });
+            tState.submissions.forEach(sub => {
+              if (sub.studentId === studentId && sub.aiReview && tState.reviewJsonBySubId[sub.submissionId]) {
+                sub.aiReview.review_json = tState.reviewJsonBySubId[sub.submissionId];
+              }
+            });
+            tState.loadedReviewStudents.add(studentId);
+          }
+        } catch (e) {} finally {
+          if (tState.loadingReviewStudentId === studentId) {
+            tState.loadingReviewStudentId = "";
+          }
+          renderTeacherApp();
+        }
       }
 
       async function refreshCloudDashboardData() {
         const client = CLOUD.getClient();
-        if (!client) return;
+        if (!client || refreshInFlight) return;
+        refreshInFlight = true;
 
         tState.loading = true;
         tState.dbError = "";
         renderTeacherApp();
 
-        const [profilesRes, subsRes, reviewsRes] = await Promise.all([
-          client.from("profiles").select("*").order("last_active_at", { ascending: false }),
-          client.from("writing_submissions").select("*").order("submitted_at", { ascending: false }),
-          client.from("writing_ai_reviews").select("*")
-        ]);
+        try {
+          const [profilesRes, subsRes, reviewsRes] = await Promise.all([
+            CLOUD.fetchAllPages(
+              () => client.from("profiles").select("*").order("last_active_at", { ascending: false }),
+              1000
+            ),
+            CLOUD.fetchAllPages(
+              () => client.from("writing_submissions").select("*").order("submitted_at", { ascending: false }),
+              1000
+            ),
+            fetchLightReviewsPaginated(client)
+          ]);
 
-        const firstErr = profilesRes.error || subsRes.error;
-        if (firstErr) {
-          tState.dbError =
-            "Không thể đọc dữ liệu từ Supabase (" +
-            (firstErr.code ? firstErr.code + ": " : "") +
-            firstErr.message +
-            "). Vui lòng mở Supabase SQL Editor và chạy file supabase-setup.sql để tạo bảng writing_submissions và cấp quyền GRANT.";
-        }
-
-        const rawProfiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
-        const subRows = Array.isArray(subsRes.data) ? subsRes.data : [];
-        const reviewRows = Array.isArray(reviewsRes.data) ? reviewsRes.data : [];
-
-        // Loại bỏ tài khoản admin khỏi danh sách học viên & thống kê
-        const hiddenAdminIds = new Set();
-        rawProfiles.forEach(p => {
-          if (isHiddenAdminAccount(p.email, p.full_name, p.id)) {
-            hiddenAdminIds.add(p.id);
+          const firstErr = profilesRes.error || subsRes.error || reviewsRes.error;
+          if (firstErr) {
+            tState.dbError =
+              "Không thể đọc dữ liệu từ Supabase (" +
+              (firstErr.code ? firstErr.code + ": " : "") +
+              firstErr.message +
+              "). Vui lòng mở Supabase SQL Editor và chạy file supabase-setup.sql để tạo bảng writing_submissions và cấp quyền GRANT.";
           }
-        });
-        const profiles = rawProfiles.filter(p => !hiddenAdminIds.has(p.id));
 
-        const reviewBySubId = {};
-        reviewRows.forEach(r => {
-          if (r && r.submission_id) reviewBySubId[r.submission_id] = r;
-        });
+          const rawProfiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
+          const subRows = Array.isArray(subsRes.data) ? subsRes.data : [];
+          const reviewRows = Array.isArray(reviewsRes.data) ? reviewsRes.data : [];
 
-        const profileById = {};
-        const parsedById = {};
-        profiles.forEach(p => {
-          profileById[p.id] = p;
-          parsedById[p.id] = CLOUD.parseFullNameAndClass(p.full_name || "");
-        });
+          // Làm mới cache chi tiết bài sửa AI để luôn đồng bộ bản mới nhất
+          tState.reviewJsonBySubId = {};
+          tState.loadedReviewStudents.clear();
+          tState.draftGradesBySubId = {};
 
-        const submittedCountByUser = {};
-        const task1CountByUser = {};
-        const task2CountByUser = {};
-        const submissions = [];
-        const nowMs = Date.now();
-
-        subRows.forEach(row => {
-          if (!row || hiddenAdminIds.has(row.user_id)) return;
-          const prof = profileById[row.user_id] || {
-            id: row.user_id,
-            full_name: "Học viên",
-            email: "",
-            auth_provider: "email"
-          };
-          if (isHiddenAdminAccount(prof.email, prof.full_name, prof.id)) return;
-
-          const parsedProf = parsedById[row.user_id] || CLOUD.parseFullNameAndClass(prof.full_name || "");
-          const catalogItem = lessonById[row.lesson_id];
-          const taskType = row.task_type || (catalogItem ? catalogItem.taskType : "task2");
-          const lessonTitle = (catalogItem && catalogItem.title) || row.lesson_title || row.lesson_id;
-          const isSubmitted = Boolean(row.is_submitted);
-
-          if (isSubmitted) {
-            submittedCountByUser[row.user_id] = (submittedCountByUser[row.user_id] || 0) + 1;
-            if (taskType === "task1") {
-              task1CountByUser[row.user_id] = (task1CountByUser[row.user_id] || 0) + 1;
-            } else {
-              task2CountByUser[row.user_id] = (task2CountByUser[row.user_id] || 0) + 1;
+          // Loại bỏ tài khoản admin khỏi danh sách học viên & thống kê
+          const hiddenAdminIds = new Set();
+          rawProfiles.forEach(p => {
+            if (isHiddenAdminAccount(p.email, p.full_name, p.id)) {
+              hiddenAdminIds.add(p.id);
             }
-          }
-
-          const activeAiReview = reviewBySubId[row.id] || null;
-          const rj = activeAiReview && activeAiReview.review_json ? activeAiReview.review_json : null;
-          const hasReadyReview = Boolean(activeAiReview && activeAiReview.status === "ready" && rj);
-          const relMs = activeAiReview && activeAiReview.release_at ? new Date(activeAiReview.release_at).getTime() : 0;
-          const isReviewReleased = hasReadyReview && relMs > 0 && relMs <= nowMs;
-          const isReviewSeen = isReviewReleased && Boolean(activeAiReview.student_seen_at);
-          const evaluatedBand = rj && rj.estimated_band ? String(rj.estimated_band).trim() : "";
-
-          const ts = row.submitted_at || row.updated_at || row.created_at;
-          submissions.push({
-            submissionId: row.id,
-            studentId: row.user_id,
-            studentName: parsedProf.fullName || prof.email || "Học viên",
-            studentClass: parsedProf.className || "",
-            studentEmail: prof.email || "",
-            taskType,
-            taskLabel: getTaskShortLabel(taskType),
-            lessonId: row.lesson_id,
-            lessonTitle,
-            promptText: row.prompt_text || "",
-            content: row.content || "",
-            wordCount: row.word_count || 0,
-            targetLevel: String(row.target_level || (activeAiReview && activeAiReview.target_level) || "B1").toUpperCase(),
-            evaluatedBand,
-            isSubmitted,
-            isReviewReleased,
-            isReviewSeen,
-            submittedAt: CLOUD.formatDateTime(ts),
-            rawTime: new Date(ts || 0).getTime(),
-            teacherFeedback: row.teacher_feedback || "",
-            teacherScore: row.teacher_score || "",
-            aiStatus: row.ai_status || "",
-            aiReleaseAt: row.ai_release_at || "",
-            aiReview: activeAiReview
           });
-        });
+          const profiles = rawProfiles.filter(p => !hiddenAdminIds.has(p.id));
 
-        submissions.sort((a, b) => (b.rawTime || 0) - (a.rawTime || 0));
+          const reviewBySubId = {};
+          reviewRows.forEach(r => {
+            if (r && r.submission_id) {
+              if (r.review_json) {
+                tState.reviewJsonBySubId[r.submission_id] = r.review_json;
+              }
+              reviewBySubId[r.submission_id] = r;
+            }
+          });
 
-        tState.students = profiles.map(p => {
-          const parsedProf = parsedById[p.id] || CLOUD.parseFullNameAndClass(p.full_name || "");
-          return {
-            id: p.id,
-            name: parsedProf.fullName || p.email,
-            className: parsedProf.className || "",
-            email: p.email,
-            authProvider: p.auth_provider || "email",
-            createdAt: CLOUD.formatDateTime(p.created_at),
-            lastActiveAt: CLOUD.formatDateTime(p.last_active_at),
-            submittedCount: submittedCountByUser[p.id] || 0,
-            task1Count: task1CountByUser[p.id] || 0,
-            task2Count: task2CountByUser[p.id] || 0
-          };
-        });
+          const profileById = {};
+          const parsedById = {};
+          profiles.forEach(p => {
+            profileById[p.id] = p;
+            parsedById[p.id] = CLOUD.parseFullNameAndClass(p.full_name || "");
+          });
 
-        tState.submissions = submissions;
-        if (tState.selectedStudentId && !tState.students.some(s => s.id === tState.selectedStudentId)) {
-          tState.selectedStudentId = "";
+          const submittedCountByUser = {};
+          const task1CountByUser = {};
+          const task2CountByUser = {};
+          const submissions = [];
+          const submissionsByStudentId = {};
+          const nowMs = Date.now();
+
+          subRows.forEach(row => {
+            if (!row || hiddenAdminIds.has(row.user_id)) return;
+            const prof = profileById[row.user_id] || {
+              id: row.user_id,
+              full_name: "Học viên",
+              email: "",
+              auth_provider: "email"
+            };
+            if (isHiddenAdminAccount(prof.email, prof.full_name, prof.id)) return;
+
+            const parsedProf = parsedById[row.user_id] || CLOUD.parseFullNameAndClass(prof.full_name || "");
+            const catalogItem = lessonById[row.lesson_id];
+            const taskType = row.task_type || (catalogItem ? catalogItem.taskType : "task2");
+            const lessonTitle = (catalogItem && catalogItem.title) || row.lesson_title || row.lesson_id;
+            const isSubmitted = Boolean(row.is_submitted);
+
+            if (isSubmitted) {
+              submittedCountByUser[row.user_id] = (submittedCountByUser[row.user_id] || 0) + 1;
+              if (taskType === "task1") {
+                task1CountByUser[row.user_id] = (task1CountByUser[row.user_id] || 0) + 1;
+              } else {
+                task2CountByUser[row.user_id] = (task2CountByUser[row.user_id] || 0) + 1;
+              }
+            }
+
+            const activeAiReview = reviewBySubId[row.id] || null;
+            const rj = (activeAiReview && activeAiReview.review_json) || tState.reviewJsonBySubId[row.id] || null;
+            const hasReadyReview = Boolean(activeAiReview && activeAiReview.status === "ready");
+            const relMs = activeAiReview && activeAiReview.release_at ? new Date(activeAiReview.release_at).getTime() : 0;
+            const isReviewReleased = hasReadyReview && relMs > 0 && relMs <= nowMs;
+            const isReviewSeen = isReviewReleased && Boolean(activeAiReview.student_seen_at);
+            const evaluatedBand = String(
+              (rj && rj.estimated_band) || (activeAiReview && activeAiReview.estimated_band) || ""
+            ).trim();
+
+            const ts = row.submitted_at || row.updated_at || row.created_at;
+            const subObj = {
+              submissionId: row.id,
+              studentId: row.user_id,
+              studentName: parsedProf.fullName || prof.email || "Học viên",
+              studentClass: parsedProf.className || "",
+              studentEmail: prof.email || "",
+              taskType,
+              taskLabel: getTaskShortLabel(taskType),
+              lessonId: row.lesson_id,
+              lessonTitle,
+              promptText: row.prompt_text || "",
+              content: row.content || "",
+              wordCount: row.word_count || 0,
+              targetLevel: CLOUD.inferTargetLevelFromClass(
+                parsedProf.className,
+                row.target_level || (activeAiReview && activeAiReview.target_level) || "B1"
+              ),
+              evaluatedBand,
+              isSubmitted,
+              isReviewReleased,
+              isReviewSeen,
+              submittedAt: CLOUD.formatDateTime(ts),
+              rawTime: new Date(ts || 0).getTime(),
+              teacherFeedback: row.teacher_feedback || "",
+              teacherScore: row.teacher_score || "",
+              aiStatus: row.ai_status || "",
+              aiReleaseAt: row.ai_release_at || "",
+              aiReview: activeAiReview
+            };
+            submissions.push(subObj);
+            if (!submissionsByStudentId[row.user_id]) {
+              submissionsByStudentId[row.user_id] = [];
+            }
+            submissionsByStudentId[row.user_id].push(subObj);
+          });
+
+          submissions.sort((a, b) => (b.rawTime || 0) - (a.rawTime || 0));
+          Object.values(submissionsByStudentId).forEach(arr => {
+            arr.sort((a, b) => (b.rawTime || 0) - (a.rawTime || 0));
+          });
+
+          tState.students = profiles.map(p => {
+            const parsedProf = parsedById[p.id] || CLOUD.parseFullNameAndClass(p.full_name || "");
+            return {
+              id: p.id,
+              name: parsedProf.fullName || p.email,
+              className: parsedProf.className || "",
+              email: p.email,
+              authProvider: p.auth_provider || "email",
+              createdAt: CLOUD.formatDateTime(p.created_at),
+              lastActiveAt: CLOUD.formatDateTime(p.last_active_at),
+              submittedCount: submittedCountByUser[p.id] || 0,
+              task1Count: task1CountByUser[p.id] || 0,
+              task2Count: task2CountByUser[p.id] || 0
+            };
+          });
+
+          tState.submissions = submissions;
+          tState.submissionsByStudentId = submissionsByStudentId;
+
+          if (tState.selectedStudentId && !tState.students.some(s => s.id === tState.selectedStudentId)) {
+            tState.selectedStudentId = "";
+          }
+          if (tState.infoModalStudentId && !tState.students.some(s => s.id === tState.infoModalStudentId)) {
+            tState.infoModalStudentId = "";
+          }
+          tState.loading = false;
+          renderTeacherApp();
+
+          if (tState.selectedStudentId) {
+            ensureStudentReviewsLoaded(tState.selectedStudentId);
+          }
+        } finally {
+          refreshInFlight = false;
         }
-        if (tState.infoModalStudentId && !tState.students.some(s => s.id === tState.infoModalStudentId)) {
-          tState.infoModalStudentId = "";
-        }
-        tState.loading = false;
-        renderTeacherApp();
       }
 
       // ======================================================================
@@ -303,6 +441,7 @@
             item.teacherScore = scoreVal;
             item.teacherFeedback = feedbackVal;
           }
+          delete tState.draftGradesBySubId[submissionId];
           tState.savedToastId = submissionId;
           renderTeacherApp();
           setTimeout(() => {
@@ -319,6 +458,7 @@
       async function triggerTeacherAiGrade(submissionId) {
         if (!submissionId || tState.gradingSubId) return;
         tState.gradingSubId = submissionId;
+        tState.openDetailsSubIds.add(submissionId);
         renderTeacherApp();
 
         const res = await CLOUD.invokeGradeWriting(submissionId, {
@@ -356,17 +496,46 @@
       async function flushPendingQueueNow() {
         if (tState.flushingQueue) return;
         tState.flushingQueue = true;
+        tState.flushProgressText = "⏳ Đang xử lý...";
         renderTeacherApp();
-        const res = await CLOUD.invokeProcessQueue(5);
-        tState.flushingQueue = false;
-        if (!res.ok) {
+
+        let totalProcessed = 0;
+        let totalSucceeded = 0;
+        let lastRemaining = 0;
+        let lastError = "";
+        const maxBatches = 15;
+
+        for (let b = 0; b < maxBatches; b++) {
+          const res = await CLOUD.invokeProcessQueue(5);
+          if (!res.ok) {
+            lastError = res.error || "Lỗi không xác định";
+            break;
+          }
+          totalProcessed += Number(res.processed || 0);
+          totalSucceeded += Number(res.succeeded || 0);
+          lastRemaining = Number(res.pending_remaining || 0);
+
+          tState.flushProgressText = `⏳ Xong ${totalSucceeded} bài...`;
           renderTeacherApp();
-          alert("Không chạy được hàng đợi chấm bài: " + (res.error || "Lỗi không xác định"));
+
+          if (lastRemaining <= 0 || Number(res.processed || 0) === 0 || Number(res.succeeded || 0) === 0) {
+            break;
+          }
+        }
+
+        tState.flushingQueue = false;
+        tState.flushProgressText = "";
+
+        if (totalProcessed === 0 && lastError) {
+          renderTeacherApp();
+          alert("Không chạy được hàng đợi chấm bài: " + lastError);
           return;
         }
+
         await refreshCloudDashboardData();
+        const extraNote = lastError ? `\n\nGhi chú: ${lastError}` : "";
         alert(
-          `Đã xử lý ${res.processed || 0} bài chờ: thành công ${res.succeeded || 0} bài, còn chờ thử lại ${res.failed || 0} bài.`
+          `Đã xử lý ${totalProcessed} bài chờ: thành công ${totalSucceeded} bài, còn đang chờ ${lastRemaining} bài.${extraNote}`
         );
       }
 
@@ -456,6 +625,8 @@
             return;
           }
 
+          tState.openDetailsSubIds.delete(submissionId);
+          delete tState.draftGradesBySubId[submissionId];
           tState.deletingSubId = "";
           await refreshCloudDashboardData();
         } catch (err) {
@@ -495,9 +666,7 @@
           (sub.teacherFeedback && sub.teacherFeedback.trim()) ||
             (sub.teacherScore && sub.teacherScore.trim())
         );
-        const hasReadyAi = Boolean(
-          sub.aiReview && sub.aiReview.status === "ready" && sub.aiReview.review_json
-        );
+        const hasReadyAi = Boolean(sub.aiReview && sub.aiReview.status === "ready");
         return hasManual || hasReadyAi;
       }
 
@@ -512,8 +681,8 @@
       }
 
       function getStudentScopedMetrics(studentId) {
-        const userSubs = tState.submissions.filter(sub => {
-          if (sub.studentId !== studentId) return false;
+        const allForStudent = tState.submissionsByStudentId[studentId] || [];
+        const userSubs = allForStudent.filter(sub => {
           if (!matchesTaskFilter(sub.taskType)) return false;
           if (!matchesLessonFilter(sub.lessonId)) return false;
           if (!matchesLevelFilter(sub)) return false;
@@ -550,12 +719,12 @@
       }
 
       function getFilteredSubmissionsForStudent(studentId) {
-        return tState.submissions.filter(sub => {
-          if (studentId) {
-            if (sub.studentId !== studentId) return false;
-          } else {
-            if (!matchesClassFilter(sub.studentClass)) return false;
-          }
+        const source = studentId
+          ? (tState.submissionsByStudentId[studentId] || [])
+          : tState.submissions;
+
+        return source.filter(sub => {
+          if (!studentId && !matchesClassFilter(sub.studentClass)) return false;
           if (!matchesTaskFilter(sub.taskType)) return false;
           if (!matchesLessonFilter(sub.lessonId)) return false;
           if (!matchesLevelFilter(sub)) return false;
@@ -584,10 +753,16 @@
       }
 
       // ======================================================================
-      // EXPORT CSV (EXCEL-READY WITH UTF-8 BOM)
+      // EXPORT CSV (EXCEL-READY WITH UTF-8 BOM & FORMULA INJECTION GUARD)
       // ======================================================================
       function exportCsvReport(rows) {
-        const csvCell = v => `"${String(v || "").replace(/"/g, '""')}"`;
+        const csvCell = v => {
+          let str = String(v || "");
+          if (/^[=+\-@\t\r]/.test(str)) {
+            str = "'" + str;
+          }
+          return `"${str.replace(/"/g, '""')}"`;
+        };
         const header = [
           "Học viên",
           "Lớp",
@@ -671,7 +846,7 @@
               <p style="font-size:13.5px;color:#52525B;line-height:1.55;margin-bottom:16px;">
                 Tài khoản <strong>${escapeHtml(tState.unauthorizedEmail)}</strong> chưa có trong danh sách bảng <code>public.teachers</code> trên Supabase nên hệ thống tự động chặn quyền đọc dữ liệu học viên.
               </p>
-              <button type="button" class="form-submit-btn" id="btn-teacher-logout">
+              <button type="button" class="form-submit-btn" id="btn-teacher-unauth-logout">
                 Đăng xuất &amp; Đăng nhập tài khoản Giáo viên →
               </button>
               <a
@@ -957,6 +1132,7 @@
 
       function renderStudentSubmissionsSection(studentObj) {
         const studentSubs = getFilteredSubmissionsForStudent(studentObj.id);
+        const isLoadingReviews = tState.loadingReviewStudentId === studentObj.id;
 
         return `
           <div class="student-drilldown-bar">
@@ -1003,16 +1179,18 @@
                       : "color:#3730A3;background:#EEF2FF;border:1px solid #C7D2FE;";
 
                     const rev = sub.aiReview;
+                    const reviewJson =
+                      (rev && rev.review_json) || tState.reviewJsonBySubId[sub.submissionId] || null;
                     const isGrading = tState.gradingSubId === sub.submissionId;
                     const isReleasing = tState.releasingSubId === sub.submissionId;
-                    const hasReadyReview = Boolean(rev && rev.status === "ready" && rev.review_json);
+                    const hasReadyReview = Boolean(rev && rev.status === "ready");
                     const relMs = rev && rev.release_at ? new Date(rev.release_at).getTime() : 0;
                     const isWaitingRelease = hasReadyReview && relMs > Date.now();
                     const remain = isWaitingRelease ? CLOUD.formatRemainingTime(rev.release_at) : "";
                     const errCount =
-                      hasReadyReview && Array.isArray(rev.review_json.corrections)
-                        ? rev.review_json.corrections.length
-                        : 0;
+                      reviewJson && Array.isArray(reviewJson.corrections)
+                        ? reviewJson.corrections.length
+                        : null;
 
                     const scheduledReleaseMs = sub.aiReleaseAt
                       ? new Date(sub.aiReleaseAt).getTime()
@@ -1033,11 +1211,19 @@
                         ? ` — ${escapeHtml(String(rev.error_message).slice(0, 120))}`
                         : "";
                       statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B45309;">🔄 Hệ thống đang chờ chấm lại (lần thử ${tries}/20)${errDetail}</span>`;
+                    } else if (rev && rev.status === "skipped") {
+                      statusHtml = `<span style="font-size:12.5px;color:#52525B;">Bài viết dưới 50 từ nên không chấm tự động.</span>`;
                     } else if (isOverdueUngraded) {
                       statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B91C1C;">⚠️ Đã quá hạn ${RELEASE_HOURS} giờ nhưng chưa có bài sửa — bấm “Tạo bài sửa” để chấm ngay.</span>`;
-                    } else if (sub.aiStatus === "pending" || sub.aiStatus === "pending_retry") {
+                    } else if (sub.aiStatus === "pending" || sub.aiStatus === "pending_retry" || sub.aiStatus === "grading") {
                       statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đang trong hàng đợi chấm tự động (trả chậm nhất sau ${RELEASE_HOURS} giờ).</span>`;
                     }
+
+                    const draft = tState.draftGradesBySubId[sub.submissionId];
+                    const scoreVal = draft ? draft.score : sub.teacherScore;
+                    const fbVal = draft ? draft.feedback : sub.teacherFeedback;
+                    const isDetailsOpen = tState.openDetailsSubIds.has(sub.submissionId);
+                    const errCountText = errCount !== null ? `${errCount} lỗi · ` : "";
 
                     return `
                       <div class="submission-review-card">
@@ -1101,13 +1287,17 @@
                         ${
                           hasReadyReview
                             ? `
-                              <details class="teacher-ai-details">
+                              <details class="teacher-ai-details" data-review-details="${escapeHtml(sub.submissionId)}" ${isDetailsOpen ? "open" : ""}>
                                 <summary>
-                                  📝 Xem chi tiết bài sửa (${errCount} lỗi · Level ${escapeHtml(rev.target_level || sub.targetLevel)}${sub.evaluatedBand ? ` · ${escapeHtml(sub.evaluatedBand)}` : ""})
+                                  📝 Xem chi tiết bài sửa (${errCountText}Level ${escapeHtml(rev.target_level || sub.targetLevel)}${sub.evaluatedBand ? ` · ${escapeHtml(sub.evaluatedBand)}` : ""})
                                 </summary>
-                                ${CLOUD.renderWritingReviewHtml(sub.content || "", rev.review_json, {
-                                  targetLevel: rev.target_level || sub.targetLevel
-                                })}
+                                ${
+                                  reviewJson
+                                    ? CLOUD.renderWritingReviewHtml(sub.content || "", reviewJson, {
+                                        targetLevel: rev.target_level || sub.targetLevel
+                                      })
+                                    : `<div style="padding:14px;font-size:13px;color:#52525B;">${isLoadingReviews ? "⏳ Đang tải chi tiết bài sửa..." : "Đang chuẩn bị nội dung bài sửa..."}</div>`
+                                }
                               </details>
                             `
                             : ""
@@ -1118,14 +1308,14 @@
                             type="text"
                             class="form-input grade-score-input"
                             placeholder="Điểm / Mức (VD: 7.5 · B2)"
-                            value="${escapeHtml(sub.teacherScore)}"
+                            value="${escapeHtml(scoreVal)}"
                             id="inp-score-${escapeHtml(sub.submissionId)}"
                           />
                           <input
                             type="text"
                             class="form-input grade-fb-input"
                             placeholder="Nhận xét thêm của Giáo viên (hiển thị ngay dưới bài viết)..."
-                            value="${escapeHtml(sub.teacherFeedback)}"
+                            value="${escapeHtml(fbVal)}"
                             id="inp-fb-${escapeHtml(sub.submissionId)}"
                           />
                           <button
@@ -1234,7 +1424,7 @@
           s => s.isSubmitted && !hasAnyFeedbackOrReview(s)
         ).length;
         const pendingAiCount = tState.submissions.filter(
-          s => s.isSubmitted && (!s.aiReview || s.aiReview.status !== "ready")
+          s => s.isSubmitted && (!s.aiReview || (s.aiReview.status !== "ready" && s.aiReview.status !== "skipped"))
         ).length;
 
         const selectedStudentObj = tState.selectedStudentId
@@ -1270,7 +1460,7 @@
                   ${
                     pendingAiCount > 0
                       ? `<button type="button" class="top-pill-btn yellow" id="btn-flush-queue" ${tState.flushingQueue ? "disabled" : ""}>
-                          <span>${tState.flushingQueue ? "⏳..." : `🔄 Chấm chờ (${pendingAiCount})`}</span>
+                          <span>${tState.flushingQueue ? escapeHtml(tState.flushProgressText || "⏳...") : `🔄 Chấm chờ (${pendingAiCount})`}</span>
                         </button>`
                       : ""
                   }
@@ -1324,6 +1514,7 @@
       function renderTeacherApp() {
         const root = document.getElementById("teacher-app");
         if (!root) return;
+        captureDraftGradesFromDom();
         if (tState.checkingAuth) {
           root.innerHTML = renderCheckingAuthView();
         } else if (tState.unauthorizedEmail) {
@@ -1390,26 +1581,34 @@
           };
         }
 
-        const btnLogout = document.getElementById("btn-teacher-logout");
-        if (btnLogout) {
-          btnLogout.onclick = async () => {
-            tState.accountMenuOpen = false;
-            const client = CLOUD.getClient();
-            if (client) {
-              try {
-                await client.auth.signOut();
-              } catch (e) {}
-            }
-            tState.authenticated = false;
-            tState.unauthorizedEmail = "";
-            tState.teacherEmail = "";
-            tState.teacherUserId = "";
-            tState.deletingUserId = "";
-            tState.selectedStudentId = "";
-            tState.infoModalStudentId = "";
-            renderTeacherApp();
-          };
-        }
+        const performTeacherLogout = async () => {
+          tState.accountMenuOpen = false;
+          const client = CLOUD.getClient();
+          if (client) {
+            try {
+              await client.auth.signOut();
+            } catch (e) {}
+          }
+          tState.authenticated = false;
+          tState.unauthorizedEmail = "";
+          tState.teacherEmail = "";
+          tState.teacherUserId = "";
+          tState.deletingUserId = "";
+          tState.selectedStudentId = "";
+          tState.infoModalStudentId = "";
+          tState.openDetailsSubIds.clear();
+          tState.draftGradesBySubId = {};
+          tState.reviewJsonBySubId = {};
+          tState.loadedReviewStudents.clear();
+          renderTeacherApp();
+        };
+
+        ["btn-teacher-logout", "btn-teacher-unauth-logout"].forEach(id => {
+          const btnLogout = document.getElementById(id);
+          if (btnLogout) {
+            btnLogout.onclick = performTeacherLogout;
+          }
+        });
 
         const btnBrandReset = document.getElementById("btn-brand-reset-view");
         if (btnBrandReset) {
@@ -1479,8 +1678,12 @@
 
         document.querySelectorAll("[data-view-student-subs]").forEach(btn => {
           btn.onclick = () => {
-            tState.selectedStudentId = btn.getAttribute("data-view-student-subs") || "";
+            const sid = btn.getAttribute("data-view-student-subs") || "";
+            tState.selectedStudentId = sid;
             renderTeacherApp();
+            if (sid) {
+              ensureStudentReviewsLoaded(sid);
+            }
             window.scrollTo({ top: 0, behavior: "smooth" });
           };
         });
@@ -1538,6 +1741,21 @@
             renderTeacherApp();
           };
         }
+
+        document.querySelectorAll("[data-review-details]").forEach(detailsEl => {
+          detailsEl.addEventListener("toggle", () => {
+            const subId = detailsEl.getAttribute("data-review-details");
+            if (!subId) return;
+            if (detailsEl.open) {
+              tState.openDetailsSubIds.add(subId);
+              if (tState.selectedStudentId) {
+                ensureStudentReviewsLoaded(tState.selectedStudentId);
+              }
+            } else {
+              tState.openDetailsSubIds.delete(subId);
+            }
+          });
+        });
 
         document.querySelectorAll("[data-save-grade]").forEach(btn => {
           btn.onclick = async () => {
@@ -1610,6 +1828,10 @@
             tState.deletingUserId = "";
             tState.selectedStudentId = "";
             tState.infoModalStudentId = "";
+            tState.openDetailsSubIds.clear();
+            tState.draftGradesBySubId = {};
+            tState.reviewJsonBySubId = {};
+            tState.loadedReviewStudents.clear();
             renderTeacherApp();
           }
         });

@@ -69,7 +69,8 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function formatDateTime(isoOrText) {
@@ -104,6 +105,19 @@
     return upperClass && CLASS_LIST.includes(upperClass)
       ? `[${upperClass}] ${cleanName}`
       : cleanName;
+  }
+
+  function inferTargetLevelFromClass(rawClassOrFullName, fallbackLevel) {
+    const raw = String(rawClassOrFullName || "").trim();
+    const bracketMatch = raw.match(/^\[([A-Za-z0-9_-]+)\]/);
+    const classToken = (bracketMatch ? bracketMatch[1] : raw).toUpperCase();
+    if (classToken.startsWith("CB")) return "B1";
+    if (classToken.includes("C1")) return "C1";
+    if (classToken.includes("B2")) return "B2";
+    if (classToken.includes("B1")) return "B1";
+    const fb = String(fallbackLevel || "").trim().toUpperCase();
+    if (fb === "C1" || fb === "B2" || fb === "B1") return fb;
+    return "B1";
   }
 
   function getInitials(name) {
@@ -142,35 +156,85 @@
     return `${Math.max(1, mins)} phút`;
   }
 
-  async function invokeGradeWriting(submissionId, options) {
+  async function getValidAccessToken(client, forceRefresh) {
+    if (!client) return "";
+    if (!forceRefresh) {
+      const { data: sessionData } = await client.auth.getSession();
+      const session = sessionData && sessionData.session ? sessionData.session : null;
+      if (session && session.access_token) {
+        const nowSec = Math.floor(Date.now() / 1000);
+        const expiresAt = Number(session.expires_at || 0);
+        if (!expiresAt || expiresAt - nowSec > 60) {
+          return session.access_token;
+        }
+      }
+    }
+    try {
+      const { data: refreshed } = await client.auth.refreshSession();
+      return refreshed && refreshed.session && refreshed.session.access_token
+        ? refreshed.session.access_token
+        : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  async function fetchWithTimeout(url, options, timeoutMs) {
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    try {
+      return await fetch(url, controller ? { ...options, signal: controller.signal } : options);
+    } catch (err) {
+      if (err && err.name === "AbortError") {
+        throw new Error("Hệ thống phản hồi chậm — bài viết vẫn đang được giữ trong hàng đợi tự chấm.");
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  async function callGradeEdgeFunction(payloadObj, timeoutMs, fallbackErrorMsg) {
     const client = getClient();
     const cfg = window.SUPABASE_CONFIG || {};
     const baseUrl = String(cfg.url || "").trim().replace(/\/+$/, "");
     const anonKey = String(cfg.anonKey || "").trim();
-    if (!client || !baseUrl || !anonKey || !submissionId) {
+    if (!client || !baseUrl || !anonKey) {
       return { ok: false, error: "Chưa kết nối Supabase." };
     }
-    const opts = options || {};
+
     try {
-      const { data: sessionData } = await client.auth.getSession();
-      const accessToken = sessionData && sessionData.session ? sessionData.session.access_token : "";
+      let accessToken = await getValidAccessToken(client, false);
       if (!accessToken) {
         return { ok: false, error: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." };
       }
 
-      const res = await fetch(`${baseUrl}/functions/v1/grade-writing`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": anonKey,
-          "Authorization": `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          submission_id: submissionId,
-          force_teacher: Boolean(opts.forceTeacher),
-          release_now: Boolean(opts.releaseNow)
-        })
-      });
+      const endpoint = `${baseUrl}/functions/v1/grade-writing`;
+      const bodyStr = JSON.stringify(payloadObj);
+
+      const postOnce = token =>
+        fetchWithTimeout(
+          endpoint,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": anonKey,
+              "Authorization": `Bearer ${token}`
+            },
+            body: bodyStr
+          },
+          timeoutMs
+        );
+
+      let res = await postOnce(accessToken);
+      if (res.status === 401) {
+        const refreshedToken = await getValidAccessToken(client, true);
+        if (refreshedToken && refreshedToken !== accessToken) {
+          accessToken = refreshedToken;
+          res = await postOnce(accessToken);
+        }
+      }
 
       const rawText = await res.text().catch(() => "");
       let parsed = null;
@@ -189,49 +253,56 @@
       }
       return parsed;
     } catch (err) {
-      return { ok: false, error: err && err.message ? err.message : "Lỗi kết nối hệ thống chấm bài." };
+      return { ok: false, error: err && err.message ? err.message : fallbackErrorMsg };
     }
   }
 
+  async function invokeGradeWriting(submissionId, options) {
+    if (!submissionId) {
+      return { ok: false, error: "Thiếu mã bài viết." };
+    }
+    const opts = options || {};
+    return callGradeEdgeFunction(
+      {
+        submission_id: submissionId,
+        force_teacher: Boolean(opts.forceTeacher),
+        release_now: Boolean(opts.releaseNow)
+      },
+      55000,
+      "Lỗi kết nối hệ thống chấm bài."
+    );
+  }
+
   async function invokeProcessQueue(batchSize) {
-    const client = getClient();
-    const cfg = window.SUPABASE_CONFIG || {};
-    const baseUrl = String(cfg.url || "").trim().replace(/\/+$/, "");
-    const anonKey = String(cfg.anonKey || "").trim();
-    if (!client || !baseUrl || !anonKey) {
-      return { ok: false, error: "Chưa kết nối Supabase." };
-    }
-    try {
-      const { data: sessionData } = await client.auth.getSession();
-      const accessToken = sessionData && sessionData.session ? sessionData.session.access_token : "";
-      if (!accessToken) {
-        return { ok: false, error: "Phiên đăng nhập đã hết hạn." };
+    return callGradeEdgeFunction(
+      {
+        mode: "process_queue",
+        batch_size: batchSize || 5
+      },
+      65000,
+      "Lỗi chạy hàng đợi chấm bài."
+    );
+  }
+
+  async function fetchAllPages(buildQuery, pageSize) {
+    const size = Math.max(100, Math.min(1000, pageSize || 1000));
+    const maxPages = 20;
+    const allRows = [];
+
+    for (let page = 0; page < maxPages; page++) {
+      const from = page * size;
+      const to = from + size - 1;
+      const { data, error } = await buildQuery().range(from, to);
+      if (error) {
+        return { data: allRows, error };
       }
-      const res = await fetch(`${baseUrl}/functions/v1/grade-writing`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": anonKey,
-          "Authorization": `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          mode: "process_queue",
-          batch_size: batchSize || 5
-        })
-      });
-      const rawText = await res.text().catch(() => "");
-      let parsed = null;
-      try {
-        parsed = rawText ? JSON.parse(rawText) : null;
-      } catch (e) {}
-      if (!res.ok || !parsed || parsed.ok !== true) {
-        const detail = (parsed && (parsed.error || parsed.message)) || rawText.slice(0, 200) || `HTTP ${res.status}`;
-        return { ok: false, error: `[HTTP ${res.status}] ${detail}` };
+      const chunk = Array.isArray(data) ? data : [];
+      allRows.push(...chunk);
+      if (chunk.length < size) {
+        break;
       }
-      return parsed;
-    } catch (err) {
-      return { ok: false, error: err && err.message ? err.message : "Lỗi chạy hàng đợi chấm bài." };
     }
+    return { data: allRows, error: null };
   }
 
   function getCategoryBadgeClass(cat) {
@@ -240,6 +311,120 @@
     if (lower.includes("dấu câu") || lower.includes("punct")) return "cat-punct";
     if (lower.includes("từ vựng") || lower.includes("văn phong") || lower.includes("vocab")) return "cat-vocab";
     return "cat-grammar";
+  }
+
+  function isWordChar(ch) {
+    if (!ch) return false;
+    return /[\p{L}\p{N}_]/u.test(ch);
+  }
+
+  function tokenizeForDiff(str) {
+    return String(str || "").match(/\s+|[\p{L}\p{N}'’-]+|[^\s\p{L}\p{N}'’-]+/gu) || [];
+  }
+
+  function renderSurgicalInlineFix(origText, corrText, num, explanation) {
+    const titleAttr = escapeHtml(`#${num}: ${explanation}`);
+    const origTokens = tokenizeForDiff(origText);
+    const origWordCount = origTokens.filter(t => !/^\s+$/.test(t)).length;
+
+    if (origWordCount <= 5) {
+      return `<span class="ai-inline-fix" title="${titleAttr}"><del class="ai-del">${escapeHtml(origText)}</del><ins class="ai-ins">${escapeHtml(corrText)}</ins><sup class="ai-sup">[${num}]</sup></span>`;
+    }
+
+    const corrTokens = tokenizeForDiff(corrText);
+    const m = origTokens.length;
+    const n = corrTokens.length;
+    if (m === 0 || n === 0 || m * n > 40000) {
+      return `<span class="ai-inline-fix" title="${titleAttr}"><del class="ai-del">${escapeHtml(origText)}</del><ins class="ai-ins">${escapeHtml(corrText)}</ins><sup class="ai-sup">[${num}]</sup></span>`;
+    }
+
+    // LCS DP theo token từ để chỉ gạch đúng từ/cụm sai thay vì gạch cả câu dài
+    const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+    for (let i = m - 1; i >= 0; i--) {
+      for (let j = n - 1; j >= 0; j--) {
+        if (origTokens[i] === corrTokens[j]) {
+          dp[i][j] = dp[i + 1][j + 1] + 1;
+        } else {
+          dp[i][j] = dp[i + 1][j] >= dp[i][j + 1] ? dp[i + 1][j] : dp[i][j + 1];
+        }
+      }
+    }
+
+    const ops = [];
+    let i = 0;
+    let j = 0;
+    while (i < m && j < n) {
+      if (origTokens[i] === corrTokens[j]) {
+        ops.push({ type: "same", tok: origTokens[i] });
+        i++;
+        j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        ops.push({ type: "del", tok: origTokens[i] });
+        i++;
+      } else {
+        ops.push({ type: "ins", tok: corrTokens[j] });
+        j++;
+      }
+    }
+    while (i < m) ops.push({ type: "del", tok: origTokens[i++] });
+    while (j < n) ops.push({ type: "ins", tok: corrTokens[j++] });
+
+    const sameWords = ops.filter(op => op.type === "same" && !/^\s+$/.test(op.tok)).length;
+    if (sameWords < 2) {
+      return `<span class="ai-inline-fix" title="${titleAttr}"><del class="ai-del">${escapeHtml(origText)}</del><ins class="ai-ins">${escapeHtml(corrText)}</ins><sup class="ai-sup">[${num}]</sup></span>`;
+    }
+
+    let htmlOut = "";
+    let supAttached = false;
+    let idx = 0;
+
+    while (idx < ops.length) {
+      if (ops[idx].type === "same") {
+        htmlOut += escapeHtml(ops[idx].tok);
+        idx++;
+        continue;
+      }
+
+      let delStr = "";
+      let insStr = "";
+      while (idx < ops.length && ops[idx].type !== "same") {
+        if (ops[idx].type === "del") delStr += ops[idx].tok;
+        else insStr += ops[idx].tok;
+        idx++;
+      }
+
+      // Giữ khoảng trắng đầu/cuối ra ngoài thẻ gạch xóa để hiển thị gọn gàng
+      const leadMatch = (delStr || insStr).match(/^\s+/);
+      const trailMatch = (delStr || insStr).match(/\s+$/);
+      const leadWs = leadMatch && (!delStr || delStr.startsWith(leadMatch[0])) && (!insStr || insStr.startsWith(leadMatch[0]))
+        ? leadMatch[0]
+        : "";
+      const trailWs = trailMatch && (!delStr || delStr.endsWith(trailMatch[0])) && (!insStr || insStr.endsWith(trailMatch[0]))
+        ? trailMatch[0]
+        : "";
+
+      const coreDel = leadWs ? delStr.slice(leadWs.length) : delStr;
+      const coreIns = leadWs ? insStr.slice(leadWs.length) : insStr;
+      const finalDel = trailWs && coreDel.endsWith(trailWs) ? coreDel.slice(0, -trailWs.length) : coreDel;
+      const finalIns = trailWs && coreIns.endsWith(trailWs) ? coreIns.slice(0, -trailWs.length) : coreIns;
+
+      if (!finalDel && !finalIns) {
+        htmlOut += escapeHtml(delStr || insStr);
+        continue;
+      }
+
+      const supHtml = !supAttached ? `<sup class="ai-sup">[${num}]</sup>` : "";
+      supAttached = true;
+
+      htmlOut += escapeHtml(leadWs);
+      htmlOut += `<span class="ai-inline-fix" title="${titleAttr}">`;
+      if (finalDel) htmlOut += `<del class="ai-del">${escapeHtml(finalDel)}</del>`;
+      if (finalIns) htmlOut += `<ins class="ai-ins">${escapeHtml(finalIns)}</ins>`;
+      htmlOut += `${supHtml}</span>`;
+      htmlOut += escapeHtml(trailWs);
+    }
+
+    return htmlOut;
   }
 
   function buildInlineHighlightedEssay(originalText, corrections) {
@@ -255,34 +440,50 @@
     const overlaps = (start, end) =>
       occupied.some(r => start < r.end && end > r.start);
 
-    list.forEach((c, idx) => {
-      const needle = String(c.original || "").trim();
-      if (!needle) return;
-      const num = c.id || idx + 1;
-      let startIdx = -1;
+    const findMatch = (needle, requireWordBoundary) => {
+      const lowerNeedle = needle.toLowerCase();
+      const startsWithWord = isWordChar(needle[0]);
+      const endsWithWord = isWordChar(needle[needle.length - 1]);
       let searchFrom = 0;
 
       while (searchFrom < text.length) {
         let pos = text.indexOf(needle, searchFrom);
         if (pos === -1) {
-          pos = lowerText.indexOf(needle.toLowerCase(), searchFrom);
+          pos = lowerText.indexOf(lowerNeedle, searchFrom);
         }
-        if (pos === -1) break;
+        if (pos === -1) return -1;
         const endPos = pos + needle.length;
-        if (!overlaps(pos, endPos)) {
-          startIdx = pos;
-          occupied.push({ start: pos, end: endPos });
-          matches.push({
-            start: pos,
-            end: endPos,
-            num,
-            original: text.slice(pos, endPos),
-            corrected: String(c.corrected || ""),
-            explanation: String(c.explanation_vi || "")
-          });
-          break;
+        const boundaryOk =
+          !requireWordBoundary ||
+          ((!startsWithWord || !isWordChar(text[pos - 1])) &&
+            (!endsWithWord || !isWordChar(text[endPos])));
+        if (boundaryOk && !overlaps(pos, endPos)) {
+          return pos;
         }
         searchFrom = pos + 1;
+      }
+      return -1;
+    };
+
+    list.forEach((c, idx) => {
+      const needle = String(c.original || "").trim();
+      if (!needle) return;
+      const num = c.id || idx + 1;
+      let pos = findMatch(needle, true);
+      if (pos === -1) {
+        pos = findMatch(needle, false);
+      }
+      if (pos !== -1) {
+        const endPos = pos + needle.length;
+        occupied.push({ start: pos, end: endPos });
+        matches.push({
+          start: pos,
+          end: endPos,
+          num,
+          original: text.slice(pos, endPos),
+          corrected: String(c.corrected || ""),
+          explanation: String(c.explanation_vi || "")
+        });
       }
     });
 
@@ -295,7 +496,7 @@
       if (m.start > cursor) {
         out += escapeHtml(text.slice(cursor, m.start));
       }
-      out += `<span class="ai-inline-fix" title="${escapeHtml(`#${m.num}: ${m.explanation}`)}"><del class="ai-del">${escapeHtml(m.original)}</del><ins class="ai-ins">${escapeHtml(m.corrected)}</ins><sup class="ai-sup">[${m.num}]</sup></span>`;
+      out += renderSurgicalInlineFix(m.original, m.corrected, m.num, m.explanation);
       cursor = m.end;
     });
     if (cursor < text.length) {
@@ -328,6 +529,7 @@
             ${reviewJson.estimated_band ? `<span class="ai-band-badge">${escapeHtml(reviewJson.estimated_band)}</span>` : ""}
             ${reviewJson.level_assessment ? `<span class="ai-assess-text">${escapeHtml(reviewJson.level_assessment)}</span>` : ""}
           </div>
+          ${reviewJson.score_note ? `<div style="font-size:12px;color:#52525B;margin-top:4px;">${escapeHtml(reviewJson.score_note)}</div>` : ""}
           ${reviewJson.overall_comment ? `<p class="ai-overall-comment">${escapeHtml(reviewJson.overall_comment)}</p>` : ""}
 
           ${
@@ -446,10 +648,14 @@
     formatRemainingTime,
     parseFullNameAndClass,
     formatStoredFullName,
+    inferTargetLevelFromClass,
     getInitials,
     renderGoogleIconSvg,
+    getValidAccessToken,
+    fetchAllPages,
     invokeGradeWriting,
     invokeProcessQueue,
+    buildInlineHighlightedEssay,
     renderWritingReviewHtml
   };
 })();

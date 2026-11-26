@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const schedule = (key, value) => {
             pending.set(key, value);
             if (!timerId) {
-                timerId = setTimeout(flush, 250);
+                timerId = setTimeout(flush, 400);
             }
         };
 
@@ -245,8 +245,19 @@ document.addEventListener('DOMContentLoaded', () => {
             renderNotificationBell();
         }
         try {
-            await client.rpc('mark_writing_review_seen', { p_submission_id: rev.submission_id });
-        } catch (e) {}
+            const { error } = await client.rpc('mark_writing_review_seen', { p_submission_id: rev.submission_id });
+            if (error) {
+                rev.student_seen_at = null;
+                if (typeof renderNotificationBell === 'function') {
+                    renderNotificationBell();
+                }
+            }
+        } catch (e) {
+            rev.student_seen_at = null;
+            if (typeof renderNotificationBell === 'function') {
+                renderNotificationBell();
+            }
+        }
     }
 
     function renderTeacherFeedbackBox(boxEl, sub) {
@@ -337,6 +348,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const rowId = `${currentAccount.id}__${lessonId}`;
         const existing = getCloudSubmission(lessonId);
 
+        const resolvedTargetLevel =
+            CLOUD && typeof CLOUD.inferTargetLevelFromClass === 'function'
+                ? CLOUD.inferTargetLevelFromClass(currentAccount.className, targetLevel)
+                : (targetLevel || 'B1');
+
         const payload = {
             id: rowId,
             user_id: currentAccount.id,
@@ -346,18 +362,39 @@ document.addEventListener('DOMContentLoaded', () => {
             prompt_text: promptText || '',
             content: content || '',
             word_count: wordCount || 0,
-            target_level: targetLevel || 'B1',
+            target_level: resolvedTargetLevel,
             is_submitted: true,
             submitted_at: nowIso,
             updated_at: nowIso
         };
 
-        const { data, error } = await client
+        if (typeof CLOUD.getValidAccessToken === 'function') {
+            const validToken = await CLOUD.getValidAccessToken(client, false);
+            if (!validToken) {
+                return { ok: false, error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại (bài viết nháp vẫn được giữ nguyên).' };
+            }
+        }
+
+        let upsertResult = await client
             .from('writing_submissions')
             .upsert(payload, { onConflict: 'id' })
             .select('*')
             .maybeSingle();
 
+        if (upsertResult.error) {
+            // Tự động làm mới phiên và thử lưu lại 1 lần nếu mạng chập chờn hoặc JWT vừa hết hạn
+            if (typeof CLOUD.getValidAccessToken === 'function') {
+                await CLOUD.getValidAccessToken(client, true);
+            }
+            await new Promise(r => setTimeout(r, 1200));
+            upsertResult = await client
+                .from('writing_submissions')
+                .upsert(payload, { onConflict: 'id' })
+                .select('*')
+                .maybeSingle();
+        }
+
+        const { data, error } = upsertResult;
         if (error) {
             return { ok: false, error: error.message || 'Không thể lưu bài lên Supabase.' };
         }
@@ -376,29 +413,33 @@ document.addEventListener('DOMContentLoaded', () => {
             ...(data || payload),
             teacher_score: (data && data.teacher_score) || (existing ? existing.teacher_score : ''),
             teacher_feedback: (data && data.teacher_feedback) || (existing ? existing.teacher_feedback : ''),
-            ai_status: 'scheduled',
-            ai_release_at: defaultReleaseIso
+            ai_status: (data && data.ai_status) || 'pending',
+            ai_release_at: (data && data.ai_release_at) || defaultReleaseIso
         };
         authState.submissionsByLessonId[lessonId] = savedRow;
 
-        // Kích hoạt Edge Function chấm & hẹn trả bài sửa chậm nhất sau 6 giờ ở nền
+        // Kích hoạt Edge Function chấm & hẹn trả bài sửa chậm nhất sau 6 giờ ở nền (kèm jitter giảm xung đột 50+ bài nộp cùng lúc)
         if (CLOUD && typeof CLOUD.invokeGradeWriting === 'function') {
-            CLOUD.invokeGradeWriting(rowId).then(gradeRes => {
-                if (gradeRes && gradeRes.ok && gradeRes.release_at) {
-                    const currentSub = authState.submissionsByLessonId[lessonId];
-                    if (currentSub) {
-                        currentSub.ai_status = gradeRes.status || 'scheduled';
-                        currentSub.ai_release_at = gradeRes.release_at;
-                        if (lessonId === getAdviceLessonId(currentAdvicePromptId)) {
-                            renderTeacherFeedbackBox(adviceTeacherFeedbackBox, currentSub);
-                        } else if (lessonId === getInquiryLessonId(currentInquiryPromptId)) {
-                            renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, currentSub);
-                        } else if (lessonId === currentEssayTopic) {
-                            renderTeacherFeedbackBox(essayTeacherFeedbackBox, currentSub);
+            const jitterMs = 400 + Math.floor(Math.random() * 2600);
+            setTimeout(() => {
+                if (!currentAccount) return;
+                CLOUD.invokeGradeWriting(rowId).then(gradeRes => {
+                    if (gradeRes && gradeRes.ok && gradeRes.release_at) {
+                        const currentSub = authState.submissionsByLessonId[lessonId];
+                        if (currentSub && currentSub.submitted_at === savedRow.submitted_at) {
+                            currentSub.ai_status = gradeRes.status || 'scheduled';
+                            currentSub.ai_release_at = gradeRes.release_at;
+                            if (lessonId === getAdviceLessonId(currentAdvicePromptId)) {
+                                renderTeacherFeedbackBox(adviceTeacherFeedbackBox, currentSub);
+                            } else if (lessonId === getInquiryLessonId(currentInquiryPromptId)) {
+                                renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, currentSub);
+                            } else if (lessonId === currentEssayTopic) {
+                                renderTeacherFeedbackBox(essayTeacherFeedbackBox, currentSub);
+                            }
                         }
                     }
-                }
-            }).catch(() => {});
+                }).catch(() => {});
+            }, jitterMs);
         }
 
         if (typeof renderNotificationBell === 'function') {
@@ -406,6 +447,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (typeof renderMySubmissionsView === 'function') {
             renderMySubmissionsView();
+        }
+        if (typeof startNotificationPolling === 'function') {
+            startNotificationPolling();
         }
 
         return { ok: true, row: savedRow };
@@ -848,12 +892,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // --- 11. Sign-off Buttons Toggle Logic ---
-    document.querySelectorAll('.signoff-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+    // --- 11. Sign-off Buttons & Vocabulary Interactive Buttons (Delegated) ---
+    document.addEventListener('click', (e) => {
+        const signoffBtn = e.target.closest('.signoff-btn');
+        if (signoffBtn) {
             e.stopPropagation();
-            btn.classList.toggle('active');
-        });
+            signoffBtn.classList.toggle('active');
+            return;
+        }
+        const vocabBtn = e.target.closest('.vocab-btn');
+        if (vocabBtn) {
+            e.stopPropagation();
+            if (!vocabBtn.dataset.en) {
+                vocabBtn.dataset.en = vocabBtn.textContent;
+            }
+            const englishText = vocabBtn.dataset.en;
+            const vietnameseText = vocabBtn.getAttribute('data-vi');
+            vocabBtn.classList.toggle('active');
+            vocabBtn.textContent = vocabBtn.classList.contains('active')
+                ? `${englishText} (${vietnameseText})`
+                : englishText;
+        }
     });
 
     // --- 12. Highlight Text Mode Logic ---
@@ -879,16 +938,22 @@ document.addEventListener('DOMContentLoaded', () => {
     function highlightSelection() {
         if (!isHighlightModeActive) return;
         const selection = window.getSelection();
-        if (selection.isCollapsed || selection.rangeCount === 0) return;
+        if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 
         const range = selection.getRangeAt(0);
 
-        // Make sure the selection is inside a mock-content container
+        // Make sure the selection is inside a mock-content container and not inside controls/tooltips/existing highlights
         let container = range.commonAncestorContainer;
-        if (container.nodeType === Node.TEXT_NODE) {
+        if (container && container.nodeType === Node.TEXT_NODE) {
             container = container.parentNode;
         }
-        if (!container.closest('.mock-content')) {
+        if (!(container instanceof Element)) return;
+        if (
+            !container.closest('.mock-content') ||
+            container.closest('.translation-box') ||
+            container.closest('.font-size-controls') ||
+            container.closest('.custom-highlight')
+        ) {
             return;
         }
 
@@ -896,9 +961,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const mark = document.createElement('mark');
             mark.className = 'custom-highlight';
             range.surroundContents(mark);
-            selection.removeAllRanges(); // Clear selection after highlighting
+            selection.removeAllRanges();
             
-            // Set flag to prevent immediate deletion click event
             justHighlighted = true;
             setTimeout(() => { justHighlighted = false; }, 100);
         } catch (e) {
@@ -910,7 +974,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 range.insertNode(mark);
                 selection.removeAllRanges();
                 
-                // Set flag to prevent immediate deletion click event
                 justHighlighted = true;
                 setTimeout(() => { justHighlighted = false; }, 100);
             } catch (err) {
@@ -933,30 +996,13 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             
             const parent = mark.parentNode;
-            // Restore original text by replacing mark with its children
+            if (!parent) return;
             while (mark.firstChild) {
                 parent.insertBefore(mark.firstChild, mark);
             }
             parent.removeChild(mark);
-            parent.normalize(); // Merge adjacent text nodes
+            parent.normalize();
         }
-    });
-
-    // --- 15. Vocabulary Interactive Buttons Logic ---
-    const vocabButtons = document.querySelectorAll('.vocab-btn');
-    vocabButtons.forEach(btn => {
-        const englishText = btn.textContent;
-        const vietnameseText = btn.getAttribute('data-vi');
-        
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            btn.classList.toggle('active');
-            if (btn.classList.contains('active')) {
-                btn.textContent = `${englishText} (${vietnameseText})`;
-            } else {
-                btn.textContent = englishText;
-            }
-        });
     });
 
     // --- 16. Draft-Style Split-Screen Writing Workspace (Thư cho lời khuyên / gợi ý — 5 Đề) ---
@@ -1805,9 +1851,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let isCurrentAdviceSubmitted = false;
 
     function countWordsClean(text) {
-        const cleaned = String(text || '').trim();
-        if (!cleaned) return 0;
-        return cleaned.split(/\s+/).filter(Boolean).length;
+        const s = String(text || '');
+        let count = 0;
+        let inWord = false;
+        for (let i = 0; i < s.length; i++) {
+            const code = s.charCodeAt(i);
+            const isWs = code === 32 || code === 10 || code === 13 || code === 9 || /\s/.test(s[i]);
+            if (isWs) {
+                inWord = false;
+            } else if (!inWord) {
+                inWord = true;
+                count++;
+            }
+        }
+        return count;
     }
 
     function getAdviceMinWords() {
@@ -2017,8 +2074,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const wc = countWordsClean(content);
             if (wc < minW || authState.isSubmittingAdvice) return;
 
-            const pData = ADVICE_PROMPTS_DATA[currentAdvicePromptId];
-            const lessonId = getAdviceLessonId(currentAdvicePromptId);
+            const submittedPromptId = currentAdvicePromptId;
+            const submittedLevel =
+                CLOUD && typeof CLOUD.inferTargetLevelFromClass === 'function'
+                    ? CLOUD.inferTargetLevelFromClass(currentAccount && currentAccount.className, currentAdviceLevel)
+                    : currentAdviceLevel;
+            const pData = ADVICE_PROMPTS_DATA[submittedPromptId];
+            const lessonId = getAdviceLessonId(submittedPromptId);
+            const existingSub = getCloudSubmission(lessonId);
+            if (
+                existingSub &&
+                existingSub.is_submitted &&
+                String(existingSub.content || '').trim() === content &&
+                String(existingSub.target_level || 'B1').toUpperCase() === submittedLevel &&
+                existingSub.ai_status !== 'error' &&
+                existingSub.ai_status !== 'skipped'
+            ) {
+                if (adviceStatusEl) {
+                    adviceStatusEl.textContent = `✓ Bài viết và trình độ Level ${submittedLevel} không thay đổi so với lần nộp trước.`;
+                    adviceStatusEl.classList.add('ready');
+                }
+                return;
+            }
+
             const lessonTitle = getCatalogLessonTitle(
                 lessonId,
                 pData ? `Task 01 · ${pData.numLabel}: ${pData.taskTitle}` : lessonId
@@ -2038,25 +2116,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 promptText,
                 content,
                 wordCount: wc,
-                targetLevel: currentAdviceLevel
+                targetLevel: submittedLevel
             });
 
             authState.isSubmittingAdvice = false;
+            const stillSamePrompt = currentAdvicePromptId === submittedPromptId;
 
             if (!res.ok) {
-                adviceSubmitBtn.disabled = false;
-                adviceSubmitBtn.textContent = isCurrentAdviceSubmitted ? 'Nộp lại' : 'Nộp bài';
-                if (adviceStatusEl) {
-                    adviceStatusEl.textContent = `⚠️ Lỗi gửi bài lên Giáo viên: ${res.error}`;
-                    adviceStatusEl.classList.remove('ready');
+                if (stillSamePrompt) {
+                    adviceSubmitBtn.disabled = false;
+                    adviceSubmitBtn.textContent = isCurrentAdviceSubmitted ? 'Nộp lại' : 'Nộp bài';
+                    if (adviceStatusEl) {
+                        adviceStatusEl.textContent = `⚠️ Lỗi gửi bài lên Giáo viên: ${res.error}`;
+                        adviceStatusEl.classList.remove('ready');
+                    }
                 }
                 return;
             }
 
-            isCurrentAdviceSubmitted = true;
             try {
-                localStorage.setItem(getAdviceSubmittedKey(currentAdvicePromptId), '1');
+                localStorage.setItem(getAdviceSubmittedKey(submittedPromptId), '1');
             } catch (e) {}
+
+            if (!stillSamePrompt) return;
+
+            isCurrentAdviceSubmitted = true;
             syncAdviceSampleUI(true);
             renderTeacherFeedbackBox(adviceTeacherFeedbackBox, res.row);
             updateAdviceWordState();
@@ -2903,11 +2987,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const wc = countWordsClean(content);
             if (wc < minW || authState.isSubmittingInquiry) return;
 
-            const pData = INQUIRY_PROMPTS_DATA[currentInquiryPromptId];
-            const lessonId = getInquiryLessonId(currentInquiryPromptId);
+            const submittedPromptId = currentInquiryPromptId;
+            const submittedLevel =
+                CLOUD && typeof CLOUD.inferTargetLevelFromClass === 'function'
+                    ? CLOUD.inferTargetLevelFromClass(currentAccount && currentAccount.className, currentInquiryLevel)
+                    : currentInquiryLevel;
+            const pData = INQUIRY_PROMPTS_DATA[submittedPromptId];
+            const lessonId = getInquiryLessonId(submittedPromptId);
+            const existingSub = getCloudSubmission(lessonId);
+            if (
+                existingSub &&
+                existingSub.is_submitted &&
+                String(existingSub.content || '').trim() === content &&
+                String(existingSub.target_level || 'B1').toUpperCase() === submittedLevel &&
+                existingSub.ai_status !== 'error' &&
+                existingSub.ai_status !== 'skipped'
+            ) {
+                if (inquiryStatusEl) {
+                    inquiryStatusEl.textContent = `✓ Bài viết và trình độ Level ${submittedLevel} không thay đổi so với lần nộp trước.`;
+                    inquiryStatusEl.classList.add('ready');
+                }
+                return;
+            }
+
             const lessonTitle = getCatalogLessonTitle(
                 lessonId,
-                pData ? `Task 01 · Hỏi thông tin ${currentInquiryPromptId}: ${pData.taskTitle}` : lessonId
+                pData ? `Task 01 · Hỏi thông tin ${submittedPromptId}: ${pData.taskTitle}` : lessonId
             );
             const promptText = pData
                 ? `${pData.promptEn}\n${(pData.bullets || []).map(b => `- ${b.en}`).join('\n')}`
@@ -2924,25 +3029,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 promptText,
                 content,
                 wordCount: wc,
-                targetLevel: currentInquiryLevel
+                targetLevel: submittedLevel
             });
 
             authState.isSubmittingInquiry = false;
+            const stillSamePrompt = currentInquiryPromptId === submittedPromptId;
 
             if (!res.ok) {
-                inquirySubmitBtn.disabled = false;
-                inquirySubmitBtn.textContent = isCurrentInquirySubmitted ? 'Nộp lại' : 'Nộp bài';
-                if (inquiryStatusEl) {
-                    inquiryStatusEl.textContent = `⚠️ Lỗi gửi bài lên Giáo viên: ${res.error}`;
-                    inquiryStatusEl.classList.remove('ready');
+                if (stillSamePrompt) {
+                    inquirySubmitBtn.disabled = false;
+                    inquirySubmitBtn.textContent = isCurrentInquirySubmitted ? 'Nộp lại' : 'Nộp bài';
+                    if (inquiryStatusEl) {
+                        inquiryStatusEl.textContent = `⚠️ Lỗi gửi bài lên Giáo viên: ${res.error}`;
+                        inquiryStatusEl.classList.remove('ready');
+                    }
                 }
                 return;
             }
 
-            isCurrentInquirySubmitted = true;
             try {
-                localStorage.setItem(getInquirySubmittedKey(currentInquiryPromptId), '1');
+                localStorage.setItem(getInquirySubmittedKey(submittedPromptId), '1');
             } catch (e) {}
+
+            if (!stillSamePrompt) return;
+
+            isCurrentInquirySubmitted = true;
             syncInquirySampleUI(true);
             renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, res.row);
             updateInquiryWordState();
@@ -3280,6 +3391,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (essayRemainingSec <= 0) {
                 essayRemainingSec = 40 * 60;
+                essayTimerBtn.classList.remove('warning');
             }
             essayTimerBtn.classList.add('running');
             essayTimerInterval = setInterval(() => {
@@ -3322,8 +3434,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const wc = countWordsClean(content);
             if (wc < 250 || authState.isSubmittingEssay) return;
 
-            const topic = ESSAY_TOPICS[currentEssayTopic] || ESSAY_TOPICS['children-devices'];
-            const lessonId = currentEssayTopic;
+            const submittedTopicId = currentEssayTopic;
+            const submittedLevel =
+                CLOUD && typeof CLOUD.inferTargetLevelFromClass === 'function'
+                    ? CLOUD.inferTargetLevelFromClass(currentAccount && currentAccount.className, currentEssayLevel)
+                    : currentEssayLevel;
+            const topic = ESSAY_TOPICS[submittedTopicId] || ESSAY_TOPICS['children-devices'];
+            const lessonId = submittedTopicId;
+            const existingSub = getCloudSubmission(lessonId);
+            if (
+                existingSub &&
+                existingSub.is_submitted &&
+                String(existingSub.content || '').trim() === content &&
+                String(existingSub.target_level || 'B1').toUpperCase() === submittedLevel &&
+                existingSub.ai_status !== 'error' &&
+                existingSub.ai_status !== 'skipped'
+            ) {
+                if (essayStatusEl) {
+                    essayStatusEl.textContent = `✓ Bài viết và trình độ Level ${submittedLevel} không thay đổi so với lần nộp trước.`;
+                    essayStatusEl.classList.add('ready');
+                }
+                return;
+            }
+
             const lessonTitle = getCatalogLessonTitle(lessonId, `Task 02 · ${topic.title}`);
 
             authState.isSubmittingEssay = true;
@@ -3337,10 +3470,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 promptText: topic.prompt || '',
                 content,
                 wordCount: wc,
-                targetLevel: currentEssayLevel
+                targetLevel: submittedLevel
             });
 
             authState.isSubmittingEssay = false;
+            const stillSameTopic = currentEssayTopic === submittedTopicId;
+
+            if (!stillSameTopic) return;
 
             if (!res.ok) {
                 essaySubmitBtn.disabled = false;
@@ -3508,25 +3644,54 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastReviewsRefreshMs = 0;
     let reviewsRefreshInFlight = false;
 
+    function hasPendingSubmittedReviews() {
+        return Object.values(authState.submissionsByLessonId || {}).some(sub => {
+            if (!sub || !sub.is_submitted) return false;
+            return !getReleasedReview(sub.lesson_id);
+        });
+    }
+
     async function refreshStudentReviews(force = false) {
         const client = CLOUD ? CLOUD.getClient() : null;
         if (!client || !currentAccount || reviewsRefreshInFlight) return;
         const now = Date.now();
-        if (!force && now - lastReviewsRefreshMs < 10000) return;
+        if (!force && now - lastReviewsRefreshMs < 30000) return;
 
         reviewsRefreshInFlight = true;
         try {
-            const { data } = await client
-                .from('writing_ai_reviews')
-                .select('*')
-                .eq('user_id', currentAccount.id);
+            const [reviewsRes, subsSyncRes] = await Promise.all([
+                client.from('writing_ai_reviews').select('*').eq('user_id', currentAccount.id),
+                client
+                    .from('writing_submissions')
+                    .select('lesson_id, teacher_score, teacher_feedback, ai_status, ai_release_at, updated_at')
+                    .eq('user_id', currentAccount.id)
+            ]);
             lastReviewsRefreshMs = Date.now();
-            if (Array.isArray(data)) {
+
+            let changed = false;
+            if (Array.isArray(reviewsRes.data)) {
                 const map = {};
-                data.forEach(row => {
+                reviewsRes.data.forEach(row => {
                     if (row && row.lesson_id) map[row.lesson_id] = row;
                 });
                 authState.reviewsByLessonId = map;
+                changed = true;
+            }
+            if (Array.isArray(subsSyncRes.data)) {
+                subsSyncRes.data.forEach(row => {
+                    if (!row || !row.lesson_id) return;
+                    const existing = authState.submissionsByLessonId[row.lesson_id];
+                    if (existing) {
+                        existing.teacher_score = row.teacher_score || '';
+                        existing.teacher_feedback = row.teacher_feedback || '';
+                        existing.ai_status = row.ai_status || existing.ai_status;
+                        existing.ai_release_at = row.ai_release_at || existing.ai_release_at;
+                        existing.updated_at = row.updated_at || existing.updated_at;
+                    }
+                });
+                changed = true;
+            }
+            if (changed) {
                 renderNotificationBell();
                 renderMySubmissionsView();
                 renderTeacherFeedbackBox(adviceTeacherFeedbackBox, getCloudSubmission(getAdviceLessonId(currentAdvicePromptId)));
@@ -3540,14 +3705,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startNotificationPolling() {
         if (authState.notifPollTimer) {
-            clearInterval(authState.notifPollTimer);
+            clearTimeout(authState.notifPollTimer);
             authState.notifPollTimer = null;
         }
-        authState.notifPollTimer = setInterval(() => {
-            if (currentAccount && document.visibilityState === 'visible') {
-                refreshStudentReviews(false);
-            }
-        }, 60000);
+        if (!currentAccount) return;
+        const scheduleNext = () => {
+            if (!currentAccount) return;
+            const hasPending = hasPendingSubmittedReviews();
+            const baseDelay = hasPending ? 75000 : 180000;
+            const jitter = Math.floor(Math.random() * 30000);
+            authState.notifPollTimer = setTimeout(async () => {
+                if (currentAccount && document.visibilityState === 'visible') {
+                    await refreshStudentReviews(false);
+                }
+                scheduleNext();
+            }, baseDelay + jitter);
+        };
+        scheduleNext();
     }
 
     if (topbarNotifBtn && topbarNotifDropdown) {
@@ -3707,18 +3881,9 @@ document.addEventListener('DOMContentLoaded', () => {
         renderMySubmissionsView();
     }
 
-    async function handleSignOut(askConfirm = false) {
-        if (askConfirm && !confirm('Bạn có muốn đăng xuất khỏi tài khoản hiện tại?')) {
-            return;
-        }
-        const client = CLOUD ? CLOUD.getClient() : null;
-        draftSaver.flush();
-        if (client) {
-            try {
-                await client.auth.signOut();
-            } catch (e) {}
-        }
+    function resetLocalSessionState() {
         currentAccount = null;
+        loadingStudentUserId = null;
         lastReviewsRefreshMs = 0;
         authState.isTeacher = false;
         authState.needsProfileSetup = false;
@@ -3726,7 +3891,7 @@ document.addEventListener('DOMContentLoaded', () => {
         authState.reviewsByLessonId = {};
         authState.notifOpen = false;
         if (authState.notifPollTimer) {
-            clearInterval(authState.notifPollTimer);
+            clearTimeout(authState.notifPollTimer);
             authState.notifPollTimer = null;
         }
         if (topbarNotifDropdown) topbarNotifDropdown.style.display = 'none';
@@ -3742,6 +3907,20 @@ document.addEventListener('DOMContentLoaded', () => {
         renderTeacherFeedbackBox(essayTeacherFeedbackBox, null);
         navigateToView('home-dashboard');
         renderAuthGate();
+    }
+
+    async function handleSignOut(askConfirm = false) {
+        if (askConfirm && !confirm('Bạn có muốn đăng xuất khỏi tài khoản hiện tại?')) {
+            return;
+        }
+        const client = CLOUD ? CLOUD.getClient() : null;
+        draftSaver.flush();
+        if (client) {
+            try {
+                await client.auth.signOut();
+            } catch (e) {}
+        }
+        resetLocalSessionState();
     }
 
     if (topbarAccountPill) {
@@ -4127,112 +4306,123 @@ document.addEventListener('DOMContentLoaded', () => {
         bindAuthGateEvents();
     }
 
+    let loadingStudentUserId = null;
+
     async function loadCloudStudentData(sessionUser) {
         const client = CLOUD ? CLOUD.getClient() : null;
         if (!client || !sessionUser) return;
 
         const uid = sessionUser.id;
-        const email = String(sessionUser.email || '').trim().toLowerCase();
-        const wantsPracticeMode = new URLSearchParams(window.location.search).get('mode') === 'practice';
-        const isPrimaryTeacherEmail = email === 'mtung0208@gmail.com';
-
-        // Tự động chuyển thẳng tài khoản Giáo viên (mtung0208@gmail.com) vào Trang Giáo viên
-        if (isPrimaryTeacherEmail && !wantsPracticeMode) {
-            window.location.replace('./teacher.html');
-            return;
-        }
-
-        const meta = sessionUser.user_metadata || {};
-        const appMeta = sessionUser.app_metadata || {};
-        const fallbackName =
-            String(meta.full_name || meta.name || '').trim() ||
-            email
-                .split('@')[0]
-                .replace(/[._-]+/g, ' ')
-                .replace(/\b\w/g, c => c.toUpperCase());
-        const avatarUrl = meta.avatar_url || meta.picture || '';
-        const provider = appMeta.provider || 'email';
-
-        authState.authLoading = true;
-        renderAuthGate();
-
-        const [profileRes, subsRes, reviewsRes, teacherRes] = await Promise.all([
-            client.from('profiles').select('*').eq('id', uid).maybeSingle(),
-            client.from('writing_submissions').select('*').eq('user_id', uid),
-            client.from('writing_ai_reviews').select('*').eq('user_id', uid),
-            client.rpc('is_teacher')
-        ]);
-
-        authState.isTeacher = Boolean(teacherRes && !teacherRes.error && teacherRes.data === true) || isPrimaryTeacherEmail;
-
-        if (authState.isTeacher && !wantsPracticeMode) {
-            window.location.replace('./teacher.html');
-            return;
-        }
-
-        // Prefer existing full_name in profiles table so Google login metadata never overwrites student edits
-        const rawStoredName =
-            profileRes && profileRes.data && profileRes.data.full_name
-                ? profileRes.data.full_name
-                : fallbackName;
-        const parsed = CLOUD.parseFullNameAndClass(rawStoredName);
-        const metaClass = String(meta.class_name || '').trim().toUpperCase();
-        const resolvedClass = parsed.className || (CLOUD.CLASS_LIST.includes(metaClass) ? metaClass : '');
-        const resolvedName = parsed.fullName || fallbackName;
-        const storedFullName = CLOUD.formatStoredFullName(resolvedName, resolvedClass);
+        if (loadingStudentUserId === uid) return;
+        loadingStudentUserId = uid;
 
         try {
-            await client.from('profiles').upsert(
-                {
-                    id: uid,
-                    email: email,
-                    full_name: storedFullName,
-                    avatar_url: avatarUrl,
-                    auth_provider: provider,
-                    last_active_at: new Date().toISOString()
-                },
-                { onConflict: 'id' }
-            );
-        } catch (e) {}
+            const email = String(sessionUser.email || '').trim().toLowerCase();
+            const wantsPracticeMode = new URLSearchParams(window.location.search).get('mode') === 'practice';
+            const isPrimaryTeacherEmail = email === 'mtung0208@gmail.com';
 
-        const subsMap = {};
-        if (Array.isArray(subsRes.data)) {
-            subsRes.data.forEach(row => {
-                if (row && row.lesson_id) {
-                    subsMap[row.lesson_id] = row;
-                }
-            });
+            // Tự động chuyển thẳng tài khoản Giáo viên (mtung0208@gmail.com) vào Trang Giáo viên
+            if (isPrimaryTeacherEmail && !wantsPracticeMode) {
+                window.location.replace('./teacher.html');
+                return;
+            }
+
+            const meta = sessionUser.user_metadata || {};
+            const appMeta = sessionUser.app_metadata || {};
+            const fallbackName =
+                String(meta.full_name || meta.name || '').trim() ||
+                email
+                    .split('@')[0]
+                    .replace(/[._-]+/g, ' ')
+                    .replace(/\b\w/g, c => c.toUpperCase());
+            const avatarUrl = meta.avatar_url || meta.picture || '';
+            const provider = appMeta.provider || 'email';
+
+            authState.authLoading = true;
+            renderAuthGate();
+
+            const [profileRes, subsRes, reviewsRes, teacherRes] = await Promise.all([
+                client.from('profiles').select('*').eq('id', uid).maybeSingle(),
+                client.from('writing_submissions').select('*').eq('user_id', uid),
+                client.from('writing_ai_reviews').select('*').eq('user_id', uid),
+                client.rpc('is_teacher')
+            ]);
+
+            authState.isTeacher = Boolean(teacherRes && !teacherRes.error && teacherRes.data === true) || isPrimaryTeacherEmail;
+
+            if (authState.isTeacher && !wantsPracticeMode) {
+                window.location.replace('./teacher.html');
+                return;
+            }
+
+            // Prefer existing full_name in profiles table so Google login metadata never overwrites student edits
+            const rawStoredName =
+                profileRes && profileRes.data && profileRes.data.full_name
+                    ? profileRes.data.full_name
+                    : fallbackName;
+            const parsed = CLOUD.parseFullNameAndClass(rawStoredName);
+            const metaClass = String(meta.class_name || '').trim().toUpperCase();
+            const resolvedClass = parsed.className || (CLOUD.CLASS_LIST.includes(metaClass) ? metaClass : '');
+            const resolvedName = parsed.fullName || fallbackName;
+            const storedFullName = CLOUD.formatStoredFullName(resolvedName, resolvedClass);
+
+            try {
+                await client.from('profiles').upsert(
+                    {
+                        id: uid,
+                        email: email,
+                        full_name: storedFullName,
+                        avatar_url: avatarUrl,
+                        auth_provider: provider,
+                        last_active_at: new Date().toISOString()
+                    },
+                    { onConflict: 'id' }
+                );
+            } catch (e) {}
+
+            const subsMap = {};
+            if (Array.isArray(subsRes.data)) {
+                subsRes.data.forEach(row => {
+                    if (row && row.lesson_id) {
+                        subsMap[row.lesson_id] = row;
+                    }
+                });
+            }
+
+            const reviewsMap = {};
+            if (Array.isArray(reviewsRes.data)) {
+                reviewsRes.data.forEach(row => {
+                    if (row && row.lesson_id) {
+                        reviewsMap[row.lesson_id] = row;
+                    }
+                });
+            }
+
+            currentAccount = {
+                id: uid,
+                name: resolvedName,
+                className: resolvedClass,
+                email: email
+            };
+
+            authState.submissionsByLessonId = subsMap;
+            authState.reviewsByLessonId = reviewsMap;
+            authState.needsProfileSetup = !resolvedClass && !authState.isTeacher;
+            authState.profileFormName = resolvedName;
+            authState.profileFormClass = resolvedClass || CLOUD.CLASS_LIST[0];
+            authState.profileFormError = '';
+            authState.authError = '';
+            authState.authInfo = '';
+            authState.authLoading = false;
+
+            hydrateWritingViewsFromCloud();
+            renderAuthGate();
+            startNotificationPolling();
+        } finally {
+            if (loadingStudentUserId === uid) {
+                loadingStudentUserId = null;
+            }
         }
-
-        const reviewsMap = {};
-        if (Array.isArray(reviewsRes.data)) {
-            reviewsRes.data.forEach(row => {
-                if (row && row.lesson_id) {
-                    reviewsMap[row.lesson_id] = row;
-                }
-            });
-        }
-
-        currentAccount = {
-            id: uid,
-            name: resolvedName,
-            className: resolvedClass,
-            email: email
-        };
-
-        authState.submissionsByLessonId = subsMap;
-        authState.reviewsByLessonId = reviewsMap;
-        authState.needsProfileSetup = !resolvedClass && !authState.isTeacher;
-        authState.profileFormName = resolvedName;
-        authState.profileFormClass = resolvedClass || CLOUD.CLASS_LIST[0];
-        authState.profileFormError = '';
-        authState.authError = '';
-        authState.authInfo = '';
-        authState.authLoading = false;
-
-        hydrateWritingViewsFromCloud();
-        renderAuthGate();
-        startNotificationPolling();
     }
 
     (async function bootstrapWritingAuth() {
@@ -4259,11 +4449,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await loadCloudStudentData(session.user);
                 }
             } else if (event === 'SIGNED_OUT') {
-                currentAccount = null;
-                authState.isTeacher = false;
-                authState.needsProfileSetup = false;
-                authState.submissionsByLessonId = {};
-                renderAuthGate();
+                resetLocalSessionState();
             }
         });
     })();
