@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <title>Trang Giáo Viên — Quản lý Học viên &amp; Bài viết (VSTEP Writing)</title>
+  <title>Trang Giáo Viên — Quản lý Học viên (VSTEP Writing)</title>
   <link rel="icon" href="data:," />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -13,7 +13,7 @@
     href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="./style.css?v=3.6" />
+  <link rel="stylesheet" href="./style.css?v=3.7" />
 </head>
 <body>
   <div id="teacher-app"></div>
@@ -25,43 +25,98 @@
       const CLOUD = window.WritingCloud;
       const LESSONS = CLOUD.LESSONS_CATALOG || [];
       const escapeHtml = CLOUD.escapeHtml;
+      const RELEASE_HOURS = 12;
 
-      const tState = {
-        loading: false,
-        authenticated: false,
-        unauthorizedEmail: "",
-        teacherEmail: "",
-        teacherUserId: "",
-        deletingUserId: "",
-        gradingSubId: "",
-        releasingSubId: "",
-        flushingQueue: false,
-        authError: "",
-        dbError: "",
-        activeTab: "submissions", // "submissions" | "students"
-        students: [],
-        submissions: [],
-        filterClass: "all", // "all" | CLASS_LIST... | "unassigned"
-        searchNameQuery: "",
-        filterStudent: "all",
-        filterTask: "all", // "all" | "task1" | "task2"
-        filterLesson: "all",
-        filterStatus: "all", // "all" | "ungraded" | "graded"
-        savedToastId: ""
-      };
+      const TASKS_CATALOG = [
+        { id: "task1", label: "Task 01 · Viết Thư", shortLabel: "Task 01" },
+        { id: "task2", label: "Task 02 · Viết Luận", shortLabel: "Task 02" }
+      ];
+
+      const LEVEL_FILTER_OPTIONS = [
+        { value: "all", label: "Tất cả trình độ" },
+        { value: "B1", label: "Mục tiêu B1" },
+        { value: "B2", label: "Mục tiêu B2" }
+      ];
 
       const lessonById = {};
       LESSONS.forEach(item => {
         lessonById[item.id] = item;
       });
 
+      const tState = {
+        checkingAuth: true,
+        loading: false,
+        authenticated: false,
+        unauthorizedEmail: "",
+        teacherEmail: "",
+        teacherUserId: "",
+        accountMenuOpen: false,
+        infoModalStudentId: "",
+        selectedStudentId: "", // "" = danh sách học viên | "<uuid>" = xem bài viết của học viên đó
+        deletingUserId: "",
+        deletingSubId: "",
+        gradingSubId: "",
+        releasingSubId: "",
+        flushingQueue: false,
+        authError: "",
+        dbError: "",
+        students: [],
+        submissions: [],
+        searchNameQuery: "",
+        filterClass: "all", // "all" | CLASS_LIST... | "unassigned"
+        filterLevel: "all", // "all" | "B1" | "B2"
+        filterTask: "all", // "all" | "task1" | "task2"
+        filterLesson: "all",
+        filterStatus: "all", // "all" | "unread_review" | "ungraded" | "graded"
+        savedToastId: ""
+      };
+
+      function isHiddenAdminAccount(email, rawName, userId) {
+        const lowerEmail = String(email || "").trim().toLowerCase();
+        const lowerName = String(rawName || "").trim().toLowerCase();
+        return (
+          lowerEmail === "mtung0208@gmail.com" ||
+          lowerEmail.startsWith("mtung0208@") ||
+          lowerName === "mtung0208" ||
+          (tState.teacherUserId && userId === tState.teacherUserId)
+        );
+      }
+
+      function getTeacherDisplayName(email) {
+        const lower = String(email || "").trim().toLowerCase();
+        if (lower === "mtung0208@gmail.com" || lower.startsWith("mtung0208@")) {
+          return "admin";
+        }
+        return email ? email.split("@")[0] : "admin";
+      }
+
+      function getTaskShortLabel(taskType) {
+        return taskType === "task1" ? "Task 01" : "Task 02";
+      }
+
+      function getBandToneClass(bandText) {
+        const lower = String(bandText || "").toLowerCase();
+        if (lower.includes("chưa đạt") || lower.includes("dưới") || /\ba[12]\b/.test(lower)) {
+          return "band-below";
+        }
+        if (lower.includes("xấp xỉ") || lower.includes("gần")) {
+          return "band-approx";
+        }
+        return "band-achieved";
+      }
+
       // ======================================================================
       // CLOUD DATA LOADER (SUPABASE + SERVER-SIDE RLS VERIFICATION)
       // ======================================================================
       async function verifyAndLoadCloudTeacher(user) {
         const client = CLOUD.getClient();
-        if (!client || !user) return;
+        if (!client || !user) {
+          tState.checkingAuth = false;
+          renderTeacherApp();
+          return;
+        }
 
+        tState.checkingAuth = true;
         tState.loading = true;
         tState.authError = "";
         tState.unauthorizedEmail = "";
@@ -69,6 +124,7 @@
 
         const { data: isTeacherFlag, error: rpcError } = await client.rpc("is_teacher");
         if (rpcError || !isTeacherFlag) {
+          tState.checkingAuth = false;
           tState.loading = false;
           tState.authenticated = false;
           tState.unauthorizedEmail = user.email || "";
@@ -76,6 +132,7 @@
           return;
         }
 
+        tState.checkingAuth = false;
         tState.authenticated = true;
         tState.teacherEmail = user.email || "";
         tState.teacherUserId = user.id || "";
@@ -105,9 +162,19 @@
             "). Vui lòng mở Supabase SQL Editor và chạy file supabase-setup.sql để tạo bảng writing_submissions và cấp quyền GRANT.";
         }
 
-        const profiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
+        const rawProfiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
         const subRows = Array.isArray(subsRes.data) ? subsRes.data : [];
         const reviewRows = Array.isArray(reviewsRes.data) ? reviewsRes.data : [];
+
+        // Loại bỏ tài khoản admin khỏi danh sách học viên & thống kê
+        const hiddenAdminIds = new Set();
+        rawProfiles.forEach(p => {
+          if (isHiddenAdminAccount(p.email, p.full_name, p.id)) {
+            hiddenAdminIds.add(p.id);
+          }
+        });
+        const profiles = rawProfiles.filter(p => !hiddenAdminIds.has(p.id));
+
         const reviewBySubId = {};
         reviewRows.forEach(r => {
           if (r && r.submission_id) reviewBySubId[r.submission_id] = r;
@@ -124,20 +191,25 @@
         const task1CountByUser = {};
         const task2CountByUser = {};
         const submissions = [];
+        const nowMs = Date.now();
 
         subRows.forEach(row => {
+          if (!row || hiddenAdminIds.has(row.user_id)) return;
           const prof = profileById[row.user_id] || {
             id: row.user_id,
             full_name: "Học viên",
             email: "",
             auth_provider: "email"
           };
+          if (isHiddenAdminAccount(prof.email, prof.full_name, prof.id)) return;
+
           const parsedProf = parsedById[row.user_id] || CLOUD.parseFullNameAndClass(prof.full_name || "");
           const catalogItem = lessonById[row.lesson_id];
           const taskType = row.task_type || (catalogItem ? catalogItem.taskType : "task2");
           const lessonTitle = (catalogItem && catalogItem.title) || row.lesson_title || row.lesson_id;
+          const isSubmitted = Boolean(row.is_submitted);
 
-          if (row.is_submitted) {
+          if (isSubmitted) {
             submittedCountByUser[row.user_id] = (submittedCountByUser[row.user_id] || 0) + 1;
             if (taskType === "task1") {
               task1CountByUser[row.user_id] = (task1CountByUser[row.user_id] || 0) + 1;
@@ -145,6 +217,14 @@
               task2CountByUser[row.user_id] = (task2CountByUser[row.user_id] || 0) + 1;
             }
           }
+
+          const activeAiReview = reviewBySubId[row.id] || null;
+          const rj = activeAiReview && activeAiReview.review_json ? activeAiReview.review_json : null;
+          const hasReadyReview = Boolean(activeAiReview && activeAiReview.status === "ready" && rj);
+          const relMs = activeAiReview && activeAiReview.release_at ? new Date(activeAiReview.release_at).getTime() : 0;
+          const isReviewReleased = hasReadyReview && relMs > 0 && relMs <= nowMs;
+          const isReviewSeen = isReviewReleased && Boolean(activeAiReview.student_seen_at);
+          const evaluatedBand = rj && rj.estimated_band ? String(rj.estimated_band).trim() : "";
 
           const ts = row.submitted_at || row.updated_at || row.created_at;
           submissions.push({
@@ -154,20 +234,24 @@
             studentClass: parsedProf.className || "",
             studentEmail: prof.email || "",
             taskType,
+            taskLabel: getTaskShortLabel(taskType),
             lessonId: row.lesson_id,
             lessonTitle,
             promptText: row.prompt_text || "",
             content: row.content || "",
             wordCount: row.word_count || 0,
-            targetLevel: row.target_level || "B1",
-            isSubmitted: Boolean(row.is_submitted),
+            targetLevel: String(row.target_level || (activeAiReview && activeAiReview.target_level) || "B1").toUpperCase(),
+            evaluatedBand,
+            isSubmitted,
+            isReviewReleased,
+            isReviewSeen,
             submittedAt: CLOUD.formatDateTime(ts),
             rawTime: new Date(ts || 0).getTime(),
             teacherFeedback: row.teacher_feedback || "",
             teacherScore: row.teacher_score || "",
             aiStatus: row.ai_status || "",
             aiReleaseAt: row.ai_release_at || "",
-            aiReview: reviewBySubId[row.id] || null
+            aiReview: activeAiReview
           });
         });
 
@@ -190,10 +274,19 @@
         });
 
         tState.submissions = submissions;
+        if (tState.selectedStudentId && !tState.students.some(s => s.id === tState.selectedStudentId)) {
+          tState.selectedStudentId = "";
+        }
+        if (tState.infoModalStudentId && !tState.students.some(s => s.id === tState.infoModalStudentId)) {
+          tState.infoModalStudentId = "";
+        }
         tState.loading = false;
         renderTeacherApp();
       }
 
+      // ======================================================================
+      // TEACHER ACTIONS (GRADE, AI REVIEW, RELEASE, DELETE STUDENT/SUBMISSION)
+      // ======================================================================
       async function saveCloudGrade(submissionId, scoreVal, feedbackVal) {
         const client = CLOUD.getClient();
         if (!client) return;
@@ -236,7 +329,10 @@
         tState.gradingSubId = "";
         if (!res.ok) {
           renderTeacherApp();
-          alert("Không chạy được chấm sửa AI: " + (res.error || "Vui lòng kiểm tra đã deploy Edge Function grade-writing và cài GEMINI_API_KEY chưa."));
+          alert(
+            "Không chạy được chấm sửa AI: " +
+              (res.error || "Vui lòng kiểm tra đã deploy Edge Function grade-writing và cài GEMINI_API_KEY chưa.")
+          );
           return;
         }
         await refreshCloudDashboardData();
@@ -270,7 +366,9 @@
           return;
         }
         await refreshCloudDashboardData();
-        alert(`Đã xử lý ${res.processed || 0} bài chờ: thành công ${res.succeeded || 0} bài, còn chờ thử lại ${res.failed || 0} bài.`);
+        alert(
+          `Đã xử lý ${res.processed || 0} bài chờ: thành công ${res.succeeded || 0} bài, còn chờ thử lại ${res.failed || 0} bài.`
+        );
       }
 
       async function deleteStudentAccount(studentId, studentName, studentEmail) {
@@ -305,9 +403,10 @@
             return;
           }
 
-          if (tState.filterStudent && studentEmail && tState.filterStudent === studentEmail) {
-            tState.filterStudent = "all";
+          if (tState.selectedStudentId === studentId) {
+            tState.selectedStudentId = "";
           }
+          tState.infoModalStudentId = "";
           tState.deletingUserId = "";
           await refreshCloudDashboardData();
         } catch (err) {
@@ -315,6 +414,187 @@
           renderTeacherApp();
           alert("Lỗi khi xoá tài khoản: " + (err && err.message ? err.message : "Không xác định"));
         }
+      }
+
+      async function deleteSubmissionForRetry(submissionId) {
+        const client = CLOUD.getClient();
+        if (!client || !submissionId || tState.deletingSubId) return;
+        const sub = tState.submissions.find(s => s.submissionId === submissionId);
+        if (!sub) return;
+
+        if (
+          !confirm(
+            `Bạn có chắc muốn XOÁ bài viết "${sub.lessonTitle}" của học viên "${sub.studentName}" để bạn ấy làm lại?\n\nBài viết và bài sửa AI của đề này sẽ bị gỡ bỏ.`
+          )
+        ) {
+          return;
+        }
+
+        tState.deletingSubId = submissionId;
+        renderTeacherApp();
+
+        try {
+          await client.from("writing_ai_reviews").delete().eq("submission_id", submissionId);
+          const { data: deletedRows, error: delErr } = await client
+            .from("writing_submissions")
+            .delete()
+            .eq("id", submissionId)
+            .select("id");
+
+          if (delErr) {
+            tState.deletingSubId = "";
+            renderTeacherApp();
+            alert("Không xoá được bài nộp: " + delErr.message);
+            return;
+          }
+
+          if (!Array.isArray(deletedRows) || deletedRows.length === 0) {
+            tState.deletingSubId = "";
+            renderTeacherApp();
+            alert(
+              "Supabase chưa xoá được bài nộp (0 dòng bị xoá). Vui lòng kiểm tra policy DELETE trên bảng writing_submissions trong supabase-setup.sql."
+            );
+            return;
+          }
+
+          tState.deletingSubId = "";
+          await refreshCloudDashboardData();
+        } catch (err) {
+          tState.deletingSubId = "";
+          renderTeacherApp();
+          alert("Lỗi khi xoá bài nộp: " + (err && err.message ? err.message : "Không xác định"));
+        }
+      }
+
+      // ======================================================================
+      // FILTERING LOGIC (HỌ TÊN, LỚP, TRÌNH ĐỘ, PHẦN THI, ĐỀ / CHỦ ĐỀ)
+      // ======================================================================
+      function matchesClassFilter(clsName) {
+        if (tState.filterClass === "all") return true;
+        if (tState.filterClass === "unassigned") return !clsName;
+        return clsName === tState.filterClass;
+      }
+
+      function matchesNameFilter(name, email) {
+        const q = tState.searchNameQuery.trim().toLowerCase();
+        if (!q) return true;
+        return (
+          String(name || "").toLowerCase().includes(q) ||
+          String(email || "").toLowerCase().includes(q)
+        );
+      }
+
+      function matchesTaskFilter(taskType) {
+        if (tState.filterTask === "all") return true;
+        return taskType === tState.filterTask;
+      }
+
+      function matchesLessonFilter(lessonId) {
+        if (tState.filterLesson === "all") return true;
+        return lessonId === tState.filterLesson;
+      }
+
+      function matchesLevelFilter(sub) {
+        if (tState.filterLevel === "all") return true;
+        return String(sub.targetLevel || "B1").toUpperCase() === tState.filterLevel;
+      }
+
+      function hasAnyFeedbackOrReview(sub) {
+        if (!sub) return false;
+        const hasManual = Boolean(
+          (sub.teacherFeedback && sub.teacherFeedback.trim()) ||
+            (sub.teacherScore && sub.teacherScore.trim())
+        );
+        const hasReadyAi = Boolean(
+          sub.aiReview && sub.aiReview.status === "ready" && sub.aiReview.review_json
+        );
+        return hasManual || hasReadyAi;
+      }
+
+      function getVisibleLessonsForTask() {
+        if (tState.filterTask === "all") return LESSONS;
+        return LESSONS.filter(item => item.taskType === tState.filterTask);
+      }
+
+      function getLessonsTotalForScope() {
+        if (tState.filterLesson !== "all") return 1;
+        return getVisibleLessonsForTask().length;
+      }
+
+      function getStudentScopedMetrics(studentId) {
+        const userSubs = tState.submissions.filter(sub => {
+          if (sub.studentId !== studentId) return false;
+          if (!matchesTaskFilter(sub.taskType)) return false;
+          if (!matchesLessonFilter(sub.lessonId)) return false;
+          if (!matchesLevelFilter(sub)) return false;
+          return true;
+        });
+
+        const submittedSubs = userSubs.filter(s => s.isSubmitted);
+        const releasedCount = submittedSubs.filter(s => s.isReviewReleased).length;
+        const seenCount = submittedSubs.filter(s => s.isReviewSeen).length;
+        const pendingCount = submittedSubs.filter(s => !s.isReviewReleased).length;
+
+        return {
+          matchedTotal: userSubs.length,
+          submittedCount: submittedSubs.length,
+          releasedCount,
+          seenCount,
+          pendingCount
+        };
+      }
+
+      function getFilteredStudents() {
+        const hasContentFilter =
+          tState.filterLevel !== "all" ||
+          tState.filterTask !== "all" ||
+          tState.filterLesson !== "all";
+
+        return tState.students
+          .filter(
+            st => matchesClassFilter(st.className) && matchesNameFilter(st.name, st.email)
+          )
+          .map(st => ({
+            ...st,
+            metrics: getStudentScopedMetrics(st.id)
+          }))
+          .filter(st => (!hasContentFilter ? true : st.metrics.matchedTotal > 0));
+      }
+
+      function getFilteredSubmissionsForStudent(studentId) {
+        return tState.submissions.filter(sub => {
+          if (studentId) {
+            if (sub.studentId !== studentId) return false;
+          } else {
+            if (!matchesNameFilter(sub.studentName, sub.studentEmail)) return false;
+            if (!matchesClassFilter(sub.studentClass)) return false;
+          }
+          if (!matchesTaskFilter(sub.taskType)) return false;
+          if (!matchesLessonFilter(sub.lessonId)) return false;
+          if (!matchesLevelFilter(sub)) return false;
+          if (tState.filterStatus === "unread_review" && (!sub.isReviewReleased || sub.isReviewSeen)) return false;
+          if (tState.filterStatus === "ungraded" && hasAnyFeedbackOrReview(sub)) return false;
+          if (tState.filterStatus === "graded" && !hasAnyFeedbackOrReview(sub)) return false;
+          return true;
+        });
+      }
+
+      function hasActiveFilters(isDetailView) {
+        if (isDetailView) {
+          return (
+            tState.filterLevel !== "all" ||
+            tState.filterTask !== "all" ||
+            tState.filterLesson !== "all" ||
+            tState.filterStatus !== "all"
+          );
+        }
+        return (
+          Boolean(tState.searchNameQuery.trim()) ||
+          tState.filterClass !== "all" ||
+          tState.filterLevel !== "all" ||
+          tState.filterTask !== "all" ||
+          tState.filterLesson !== "all"
+        );
       }
 
       // ======================================================================
@@ -328,23 +608,34 @@
           "Email",
           "Phần thi",
           "Đề / Chủ đề",
-          "Trình độ",
+          "Mục tiêu Level",
+          "Đánh giá AI",
+          "Đã đọc bài sửa",
           "Số từ",
           "Thời gian nộp",
           "Nội dung bài viết",
-          "Điểm / Band",
+          "Điểm / Band (GV)",
           "Nhận xét giáo viên"
         ];
         const lines = [header.map(csvCell).join(",")];
         rows.forEach(sub => {
+          const readLabel = !sub.isSubmitted
+            ? "—"
+            : sub.isReviewReleased
+              ? sub.isReviewSeen
+                ? "Đã đọc"
+                : "Chưa đọc"
+              : "Chờ trả bài";
           lines.push(
             [
               sub.studentName,
-              sub.studentClass || "Chưa chọn",
+              sub.studentClass || "—",
               sub.studentEmail,
               sub.taskType === "task1" ? "Task 01 (Viết Thư)" : "Task 02 (Viết Luận)",
               sub.lessonTitle,
               sub.targetLevel || "B1",
+              sub.evaluatedBand || "",
+              readLabel,
               sub.wordCount || 0,
               sub.submittedAt,
               sub.content,
@@ -369,6 +660,18 @@
       // ======================================================================
       // RENDERING VIEWS
       // ======================================================================
+      function renderCheckingAuthView() {
+        return `
+          <div class="auth-wrapper">
+            <div class="auth-card-box" style="text-align:center;padding:28px 22px;">
+              <div style="font-size:14px;font-weight:700;color:#52525B;">
+                Đang xác thực tài khoản...
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       function renderUnauthorizedView() {
         return `
           <div class="auth-wrapper">
@@ -401,13 +704,13 @@
           <div class="auth-wrapper">
             <div class="auth-card-box">
               <div style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                <span class="auth-badge-tag green">TRANG GIÁO VIÊN · SUPABASE CLOUD</span>
+                <span class="auth-badge-tag green">TRANG GIÁO VIÊN · VSTEP WRITING</span>
               </div>
               <h1 style="font-size:22px;font-weight:900;color:#18181B;margin-bottom:6px;">
                 Đăng nhập Quản trị Giáo viên
               </h1>
               <p style="font-size:13.5px;color:#52525B;line-height:1.55;margin-bottom:16px;">
-                Đăng nhập bằng chính tài khoản <strong>Gmail Giáo viên</strong> đã khai báo trong Supabase để quản lý học viên, đọc bài viết Task 01 / Task 02 và ghi nhận xét.
+                Đăng nhập bằng tài khoản <strong>Giáo viên</strong> để quản lý học viên, đọc bài viết Task 01 / Task 02 và chấm nhận xét.
               </p>
 
               ${
@@ -450,116 +753,145 @@
         `;
       }
 
-      function matchesClassFilter(clsName) {
-        if (tState.filterClass === "all") return true;
-        if (tState.filterClass === "unassigned") return !clsName;
-        return clsName === tState.filterClass;
-      }
-
-      function matchesNameFilter(name, email) {
-        const q = tState.searchNameQuery.trim().toLowerCase();
-        if (!q) return true;
-        return (
-          String(name || "").toLowerCase().includes(q) ||
-          String(email || "").toLowerCase().includes(q)
-        );
-      }
-
-      function getFilteredStudents() {
-        return tState.students.filter(
-          st => matchesClassFilter(st.className) && matchesNameFilter(st.name, st.email)
-        );
-      }
-
-      function getFilteredSubmissions() {
-        return tState.submissions.filter(sub => {
-          if (!matchesClassFilter(sub.studentClass)) return false;
-          if (!matchesNameFilter(sub.studentName, sub.studentEmail)) return false;
-          if (tState.filterStudent !== "all" && sub.studentEmail !== tState.filterStudent) return false;
-          if (tState.filterTask !== "all" && sub.taskType !== tState.filterTask) return false;
-          if (tState.filterLesson !== "all" && sub.lessonId !== tState.filterLesson) return false;
-          if (tState.filterStatus === "ungraded" && (sub.teacherFeedback || sub.teacherScore)) return false;
-          if (tState.filterStatus === "graded" && !sub.teacherFeedback && !sub.teacherScore) return false;
-          return true;
-        });
-      }
-
+      // Chỉ hiện mã lớp gọn gàng (ONB204 / CB221), không kèm chữ "Lớp"
       function renderClassBadge(className) {
         return className
-          ? `<span class="class-badge-pill">Lớp ${escapeHtml(className)}</span>`
-          : `<span class="class-badge-pill unassigned">Chưa chọn lớp</span>`;
+          ? `<span class="class-badge-pill">${escapeHtml(className)}</span>`
+          : `<span class="class-badge-pill unassigned">—</span>`;
       }
 
-      function renderSharedClassAndNameControls(countLabel) {
-        const classStudents = tState.students.filter(st => matchesClassFilter(st.className));
-        const visibleLessons =
-          tState.filterTask === "all"
-            ? LESSONS
-            : LESSONS.filter(item => item.taskType === tState.filterTask);
+      function renderReadReviewBadge(metrics) {
+        if (!metrics || (metrics.releasedCount === 0 && metrics.pendingCount === 0)) {
+          return `<span class="review-read-pill neutral">Chưa có bài sửa</span>`;
+        }
+        if (metrics.releasedCount === 0 && metrics.pendingCount > 0) {
+          return `<span class="review-read-pill waiting">⏳ Chờ trả (${metrics.pendingCount})</span>`;
+        }
+        if (metrics.seenCount === metrics.releasedCount) {
+          return `<span class="review-read-pill read">✓ Đã đọc (${metrics.seenCount}/${metrics.releasedCount})</span>`;
+        }
+        if (metrics.seenCount === 0) {
+          return `<span class="review-read-pill unread">● Chưa đọc (0/${metrics.releasedCount})</span>`;
+        }
+        return `<span class="review-read-pill partial">Đã đọc ${metrics.seenCount}/${metrics.releasedCount}</span>`;
+      }
+
+      function renderAccountMenuHtml() {
+        const displayName = getTeacherDisplayName(tState.teacherEmail);
+        const initials = displayName === "admin" ? "AD" : CLOUD.getInitials(displayName);
+
+        return `
+          <div class="account-menu-wrap" id="teacher-account-menu-wrap">
+            <button
+              type="button"
+              class="user-account-pill"
+              id="btn-toggle-account-menu"
+              aria-expanded="${tState.accountMenuOpen ? "true" : "false"}"
+              title="Tài khoản quản trị"
+            >
+              <span class="user-initials">${escapeHtml(initials)}</span>
+              <span>${escapeHtml(displayName)}</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+
+            ${
+              tState.accountMenuOpen
+                ? `
+                <div class="account-dropdown" id="teacher-account-dropdown">
+                  <div class="account-dropdown-meta">
+                    <div class="account-dropdown-role">${escapeHtml(displayName)}</div>
+                    <div class="account-dropdown-email">${escapeHtml(tState.teacherEmail || "")}</div>
+                  </div>
+                  <button type="button" class="account-logout-item" id="btn-teacher-logout">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    <span>Đăng xuất</span>
+                  </button>
+                </div>
+              `
+                : ""
+            }
+          </div>
+        `;
+      }
+
+      function renderSharedFilterBar(countLabel, includeSubmissionStatus) {
+        const visibleLessons = getVisibleLessonsForTask();
+        const showReset = hasActiveFilters(includeSubmissionStatus);
 
         return `
           <div class="teacher-filter-bar">
-            <div style="font-size:13.5px;font-weight:700;color:#18181B;">
-              ${countLabel}
+            <div class="teacher-filter-top">
+              <div style="font-size:13.5px;font-weight:700;color:#18181B;">
+                ${countLabel}
+              </div>
+              ${
+                showReset
+                  ? `<button type="button" class="teacher-reset-filter-btn" id="btn-reset-filters">↺ Đặt lại bộ lọc</button>`
+                  : ""
+              }
             </div>
 
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <input
-                type="text"
-                id="inp-filter-name"
-                class="form-input"
-                style="height:36px;width:210px;font-size:13px;"
-                placeholder="🔍 Tìm theo họ tên học viên..."
-                value="${escapeHtml(tState.searchNameQuery)}"
-              />
+            <div class="teacher-filter-controls">
+              ${
+                !includeSubmissionStatus
+                  ? `
+                <input
+                  type="text"
+                  id="inp-filter-name"
+                  class="form-input teacher-filter-item"
+                  aria-label="Tìm theo họ tên hoặc email"
+                  placeholder="🔍 Tìm họ tên / email..."
+                  value="${escapeHtml(tState.searchNameQuery)}"
+                />
 
-              <select id="sel-filter-class" class="form-input" style="height:36px;width:auto;font-size:13px;font-weight:700;">
-                <option value="all" ${tState.filterClass === "all" ? "selected" : ""}>Tất cả các lớp</option>
-                ${CLOUD.CLASS_LIST.map(
-                  cls => `<option value="${cls}" ${tState.filterClass === cls ? "selected" : ""}>Lớp ${cls}</option>`
+                <select id="sel-filter-class" class="form-input teacher-filter-item" aria-label="Lọc theo lớp">
+                  <option value="all" ${tState.filterClass === "all" ? "selected" : ""}>Tất cả lớp</option>
+                  ${CLOUD.CLASS_LIST.map(
+                    cls => `<option value="${cls}" ${tState.filterClass === cls ? "selected" : ""}>${cls}</option>`
+                  ).join("")}
+                  <option value="unassigned" ${tState.filterClass === "unassigned" ? "selected" : ""}>Chưa chọn lớp</option>
+                </select>
+              `
+                  : ""
+              }
+
+              <select id="sel-filter-level" class="form-input teacher-filter-item" aria-label="Lọc theo trình độ">
+                ${LEVEL_FILTER_OPTIONS.map(
+                  opt =>
+                    `<option value="${escapeHtml(opt.value)}" ${tState.filterLevel === opt.value ? "selected" : ""}>${escapeHtml(opt.label)}</option>`
                 ).join("")}
-                <option value="unassigned" ${tState.filterClass === "unassigned" ? "selected" : ""}>Chưa chọn lớp</option>
+              </select>
+
+              <select id="sel-filter-task" class="form-input teacher-filter-item" aria-label="Lọc theo phần thi">
+                <option value="all" ${tState.filterTask === "all" ? "selected" : ""}>Cả 2 Task (Task 1–2)</option>
+                ${TASKS_CATALOG.map(
+                  t => `<option value="${t.id}" ${tState.filterTask === t.id ? "selected" : ""}>${escapeHtml(t.label)}</option>`
+                ).join("")}
+              </select>
+
+              <select id="sel-filter-lesson" class="form-input teacher-filter-item" aria-label="Lọc theo đề / chủ đề">
+                <option value="all" ${tState.filterLesson === "all" ? "selected" : ""}>
+                  Tất cả đề / chủ đề (${visibleLessons.length})
+                </option>
+                ${visibleLessons
+                  .map(
+                    l => `
+                    <option value="${escapeHtml(l.id)}" ${tState.filterLesson === l.id ? "selected" : ""}>
+                      ${escapeHtml(l.title)}
+                    </option>
+                  `
+                  )
+                  .join("")}
               </select>
 
               ${
-                tState.activeTab === "submissions"
+                includeSubmissionStatus
                   ? `
-                <select id="sel-filter-student" class="form-input" style="height:36px;width:auto;font-size:13px;font-weight:600;">
-                  <option value="all">Tất cả học viên (${classStudents.length})</option>
-                  ${classStudents
-                    .map(
-                      a => `
-                      <option value="${escapeHtml(a.email)}" ${tState.filterStudent === a.email ? "selected" : ""}>
-                        ${a.className ? `[${escapeHtml(a.className)}] ` : ""}${escapeHtml(a.name)}
-                      </option>
-                    `
-                    )
-                    .join("")}
-                </select>
-
-                <select id="sel-filter-task" class="form-input" style="height:36px;width:auto;font-size:13px;font-weight:600;">
-                  <option value="all" ${tState.filterTask === "all" ? "selected" : ""}>Cả 2 Task</option>
-                  <option value="task1" ${tState.filterTask === "task1" ? "selected" : ""}>Task 01 · Viết Thư</option>
-                  <option value="task2" ${tState.filterTask === "task2" ? "selected" : ""}>Task 02 · Viết Luận</option>
-                </select>
-
-                <select id="sel-filter-lesson" class="form-input" style="height:36px;width:auto;max-width:250px;font-size:13px;font-weight:600;">
-                  <option value="all">Tất cả đề / chủ đề</option>
-                  ${visibleLessons
-                    .map(
-                      l => `
-                      <option value="${escapeHtml(l.id)}" ${tState.filterLesson === l.id ? "selected" : ""}>
-                        ${escapeHtml(l.title)}
-                      </option>
-                    `
-                    )
-                    .join("")}
-                </select>
-
-                <select id="sel-filter-status" class="form-input" style="height:36px;width:auto;font-size:13px;font-weight:600;">
+                <select id="sel-filter-status" class="form-input teacher-filter-item" aria-label="Lọc theo trạng thái">
                   <option value="all" ${tState.filterStatus === "all" ? "selected" : ""}>Mọi trạng thái</option>
-                  <option value="ungraded" ${tState.filterStatus === "ungraded" ? "selected" : ""}>Chưa nhận xét</option>
-                  <option value="graded" ${tState.filterStatus === "graded" ? "selected" : ""}>Đã có nhận xét</option>
+                  <option value="unread_review" ${tState.filterStatus === "unread_review" ? "selected" : ""}>Bài sửa học viên chưa đọc</option>
+                  <option value="ungraded" ${tState.filterStatus === "ungraded" ? "selected" : ""}>Chưa có bài sửa / nhận xét</option>
+                  <option value="graded" ${tState.filterStatus === "graded" ? "selected" : ""}>Đã có bài sửa / nhận xét</option>
                 </select>
               `
                   : ""
@@ -569,114 +901,34 @@
         `;
       }
 
-      function renderTeacherDashboard() {
-        const filteredSubs = getFilteredSubmissions();
-        const totalSubmitted = tState.submissions.filter(s => s.isSubmitted).length;
-        const totalUngraded = tState.submissions.filter(s => s.isSubmitted && !s.teacherFeedback && !s.teacherScore).length;
-        const totalGraded = tState.submissions.filter(s => s.isSubmitted && (s.teacherFeedback || s.teacherScore)).length;
-        const pendingAiCount = tState.submissions.filter(s => s.isSubmitted && (!s.aiReview || s.aiReview.status !== "ready")).length;
-
-        return `
-          <div class="teacher-page-shell">
-            <header class="teacher-topbar">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <div class="teacher-brand-title">👨‍🏫 TRANG GIÁO VIÊN · VSTEP WRITING</div>
-                <span class="cloud-mode-pill">☁️ SUPABASE CLOUD</span>
-              </div>
-
-              <div class="teacher-topbar-actions">
-                <a href="./index.html?mode=practice" class="top-pill-btn">← Về trang luyện tập</a>
-                ${
-                  pendingAiCount > 0
-                    ? `<button type="button" class="top-pill-btn yellow" id="btn-flush-queue" ${tState.flushingQueue ? "disabled" : ""}>
-                        ${tState.flushingQueue ? "⏳ Đang chấm hàng đợi..." : `🔄 Chấm bài chờ (${pendingAiCount})`}
-                      </button>`
-                    : ""
-                }
-                <button type="button" class="top-pill-btn" id="btn-refresh-data">
-                  ${tState.loading ? "⏳ Đang tải..." : "↻ Làm mới"}
-                </button>
-                <button type="button" class="top-pill-btn yellow" id="btn-export-csv">📊 Xuất Excel (.csv)</button>
-                <button type="button" class="user-account-pill" id="btn-teacher-logout">
-                  <span>${escapeHtml(tState.teacherEmail || "Giáo viên")} · Đăng xuất</span>
-                </button>
-              </div>
-            </header>
-
-            <main class="teacher-container">
-              ${
-                tState.dbError
-                  ? `<div style="padding:12px 16px;border:2px solid #DC2626;background:#FEF2F2;color:#B91C1C;font-size:13.5px;font-weight:700;margin-bottom:18px;box-shadow:3px 3px 0px #DC2626;">⚠️ ${escapeHtml(tState.dbError)}</div>`
-                  : ""
-              }
-
-              <div class="teacher-stats-grid">
-                <div class="teacher-stat-card">
-                  <div class="teacher-stat-label">Tổng số học viên</div>
-                  <div class="teacher-stat-value">${tState.students.length}</div>
-                </div>
-                <div class="teacher-stat-card">
-                  <div class="teacher-stat-label">Bài viết đã nộp</div>
-                  <div class="teacher-stat-value" style="color:#15803D;">${totalSubmitted}</div>
-                </div>
-                <div class="teacher-stat-card">
-                  <div class="teacher-stat-label">Bài chờ chấm / nhận xét</div>
-                  <div class="teacher-stat-value" style="color:#B45309;">${totalUngraded}</div>
-                </div>
-                <div class="teacher-stat-card">
-                  <div class="teacher-stat-label">Bài đã chấm &amp; nhận xét</div>
-                  <div class="teacher-stat-value" style="color:#4F46E5;">${totalGraded}</div>
-                </div>
-              </div>
-
-              <div class="teacher-tabs-bar">
-                <button type="button" class="teacher-tab-btn ${tState.activeTab === "submissions" ? "active" : ""}" data-teacher-tab="submissions">
-                  ✍️ Bài viết của học viên (${tState.submissions.length})
-                </button>
-                <button type="button" class="teacher-tab-btn ${tState.activeTab === "students" ? "active" : ""}" data-teacher-tab="students">
-                  👥 Quản lý Tài khoản Học viên (${tState.students.length})
-                </button>
-              </div>
-
-              ${
-                tState.activeTab === "students"
-                  ? renderStudentsManagementTab()
-                  : renderSubmissionsTab(filteredSubs)
-              }
-            </main>
-          </div>
-        `;
-      }
-
-      function renderStudentsManagementTab() {
+      function renderStudentsTableSection() {
         const filteredStudents = getFilteredStudents();
-        const totalLessons = LESSONS.length;
-        const filterBarHtml = renderSharedClassAndNameControls(
-          `Đang hiển thị <strong>${filteredStudents.length}</strong> / ${tState.students.length} học viên`
+        const totalLessonsInScope = getLessonsTotalForScope();
+        const filterBarHtml = renderSharedFilterBar(
+          `Danh sách học viên · <strong>${filteredStudents.length}</strong> / ${tState.students.length}`,
+          false
         );
 
         if (filteredStudents.length === 0) {
           return `
             ${filterBarHtml}
-            <div style="padding:36px;text-align:center;border:2px dashed #D4D4D8;background:#FFFFFF;color:#52525B;">
-              <p style="font-size:15.5px;font-weight:700;">Chưa có tài khoản học viên nào khớp bộ lọc.</p>
+            <div style="padding:36px 20px;text-align:center;border:2px dashed #D4D4D8;background:#FFFFFF;color:#52525B;border-radius:10px;">
+              <p style="font-size:15px;font-weight:700;margin-bottom:4px;">Chưa có học viên nào khớp bộ lọc hiện tại.</p>
             </div>
           `;
         }
 
         return `
           ${filterBarHtml}
-          <div style="overflow-x:auto;">
+          <div class="teacher-table-wrap">
             <table class="teacher-students-table">
               <thead>
                 <tr>
                   <th>Học viên</th>
                   <th>Lớp</th>
-                  <th>Đăng nhập qua</th>
                   <th>Tiến độ nộp bài</th>
-                  <th>Ngày tham gia</th>
-                  <th>Hoạt động gần nhất</th>
-                  <th>Thao tác</th>
+                  <th>Đã đọc bài sửa</th>
+                  <th style="text-align:right;">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -684,40 +936,37 @@
                   .map(
                     st => `
                     <tr>
-                      <td>
-                        <div style="font-weight:800;color:#18181B;">${escapeHtml(st.name)}</div>
-                        <div style="font-size:12px;color:#71717A;">${escapeHtml(st.email)}</div>
-                      </td>
-                      <td>${renderClassBadge(st.className)}</td>
-                      <td>
-                        <span class="provider-pill ${st.authProvider === "google" ? "google" : ""}">
-                          ${st.authProvider === "google" ? "Google" : "Email"}
-                        </span>
-                      </td>
-                      <td>
-                        <div><strong>${st.submittedCount}</strong> / ${totalLessons} bài</div>
-                        <div style="font-size:11.5px;color:#71717A;">Task 1: ${st.task1Count} · Task 2: ${st.task2Count}</div>
-                      </td>
-                      <td style="font-size:12.5px;color:#52525B;">${escapeHtml(st.createdAt || "—")}</td>
-                      <td style="font-size:12.5px;color:#52525B;">${escapeHtml(st.lastActiveAt || "—")}</td>
-                      <td>
-                        <div class="teacher-row-actions">
-                          <button type="button" class="top-pill-btn" data-view-student-subs="${escapeHtml(st.email)}">
-                            Xem bài làm →
+                      <td data-label="Học viên">
+                        <div class="student-name-with-info">
+                          <span class="student-name-text">${escapeHtml(st.name)}</span>
+                          <button
+                            type="button"
+                            class="student-info-icon-btn"
+                            data-open-student-info="${escapeHtml(st.id)}"
+                            title="Xem thông tin chi tiết học viên"
+                            aria-label="Thông tin học viên ${escapeHtml(st.name)}"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                              <circle cx="12" cy="12" r="10"/>
+                              <line x1="12" y1="16" x2="12" y2="12"/>
+                              <line x1="12" y1="8" x2="12.01" y2="8"/>
+                            </svg>
                           </button>
-                          ${
-                            st.id !== tState.teacherUserId
-                              ? `<button
-                                  type="button"
-                                  class="btn-danger-outline"
-                                  data-delete-student="${escapeHtml(st.id)}"
-                                  data-delete-student-name="${escapeHtml(st.name)}"
-                                  data-delete-student-email="${escapeHtml(st.email)}"
-                                  ${tState.deletingUserId === st.id ? "disabled" : ""}
-                                >${tState.deletingUserId === st.id ? "Đang xoá..." : "Xoá"}</button>`
-                              : ""
-                          }
                         </div>
+                      </td>
+                      <td data-label="Lớp">${renderClassBadge(st.className)}</td>
+                      <td data-label="Tiến độ nộp bài">
+                        <strong>${st.metrics.submittedCount}</strong> / ${totalLessonsInScope} bài
+                      </td>
+                      <td data-label="Đã đọc bài sửa">${renderReadReviewBadge(st.metrics)}</td>
+                      <td data-label="Thao tác" class="td-actions-right">
+                        <button
+                          type="button"
+                          class="top-pill-btn student-view-subs-btn"
+                          data-view-student-subs="${escapeHtml(st.id)}"
+                        >
+                          <span>Xem bài làm (${st.metrics.matchedTotal}) →</span>
+                        </button>
                       </td>
                     </tr>
                   `
@@ -729,40 +978,108 @@
         `;
       }
 
-      function renderSubmissionsTab(filteredSubs) {
+      function renderStudentSubmissionsSection(studentObj) {
+        const studentSubs = getFilteredSubmissionsForStudent(studentObj.id);
+
         return `
-          ${renderSharedClassAndNameControls(`Đang hiển thị <strong>${filteredSubs.length}</strong> bài viết`)}
+          <div class="student-drilldown-bar">
+            <button type="button" class="nb-back-btn" id="btn-back-to-students">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              <span>Danh sách học viên</span>
+            </button>
+
+            <div class="student-drilldown-meta">
+              <span style="font-size:15.5px;font-weight:800;color:#18181B;">${escapeHtml(studentObj.name)}</span>
+              ${renderClassBadge(studentObj.className)}
+              <button
+                type="button"
+                class="student-info-icon-btn"
+                data-open-student-info="${escapeHtml(studentObj.id)}"
+                title="Thông tin học viên"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="16" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          ${renderSharedFilterBar(
+            `Bài viết của <strong>${escapeHtml(studentObj.name)}</strong> · <strong>${studentSubs.length}</strong> bài`,
+            true
+          )}
 
           ${
-            filteredSubs.length === 0
+            studentSubs.length === 0
               ? `
-              <div style="padding:36px;text-align:center;border:2px dashed #D4D4D8;background:#FFFFFF;color:#52525B;">
-                <p style="font-size:16px;font-weight:700;margin-bottom:6px;">Chưa có bài viết nào khớp bộ lọc.</p>
-                <p style="font-size:13.5px;">Khi học viên hoàn thành bài viết Task 01 hoặc Task 02 và bấm <strong>Nộp bài</strong>, bài viết sẽ tự động đồng bộ về đây.</p>
+              <div style="padding:36px 20px;text-align:center;border:2px dashed #D4D4D8;background:#FFFFFF;color:#52525B;border-radius:10px;">
+                <p style="font-size:15px;font-weight:700;margin-bottom:4px;">Học viên chưa có bài viết nào khớp bộ lọc.</p>
               </div>
             `
-              : filteredSubs
+              : studentSubs
                   .map(sub => {
                     const isTask1 = sub.taskType === "task1";
-                    const badgeStyle = isTask1
-                      ? "color:#92400E;background:#FEF3C7;"
-                      : "color:#3730A3;background:#EEF2FF;";
+                    const taskBadgeStyle = isTask1
+                      ? "color:#92400E;background:#FEF3C7;border:1px solid #FDE68A;"
+                      : "color:#3730A3;background:#EEF2FF;border:1px solid #C7D2FE;";
+
+                    const rev = sub.aiReview;
+                    const isGrading = tState.gradingSubId === sub.submissionId;
+                    const isReleasing = tState.releasingSubId === sub.submissionId;
+                    const hasReadyReview = Boolean(rev && rev.status === "ready" && rev.review_json);
+                    const relMs = rev && rev.release_at ? new Date(rev.release_at).getTime() : 0;
+                    const isWaiting12h = hasReadyReview && relMs > Date.now();
+                    const remain = isWaiting12h ? CLOUD.formatRemainingTime(rev.release_at) : "";
+                    const errCount =
+                      hasReadyReview && Array.isArray(rev.review_json.corrections)
+                        ? rev.review_json.corrections.length
+                        : 0;
+
+                    const scheduledReleaseMs = sub.aiReleaseAt
+                      ? new Date(sub.aiReleaseAt).getTime()
+                      : sub.rawTime
+                        ? sub.rawTime + RELEASE_HOURS * 3600 * 1000
+                        : 0;
+                    const isOverdueUngraded =
+                      !hasReadyReview && scheduledReleaseMs > 0 && scheduledReleaseMs <= Date.now();
+
+                    let statusHtml = `<span style="font-size:12.5px;color:#52525B;">Chưa có bài sửa chi tiết AI.</span>`;
+                    if (hasReadyReview && isWaiting12h) {
+                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đã chấm xong · Hẹn trả lúc ${escapeHtml(CLOUD.formatDateTime(rev.release_at))} (còn ${escapeHtml(remain)})</span>`;
+                    } else if (hasReadyReview) {
+                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#166534;">✅ Đã trả bài sửa (${escapeHtml(CLOUD.formatDateTime(rev.release_at))}) · ${rev.student_seen_at ? "✓ Học viên đã đọc" : "● Học viên chưa đọc"}</span>`;
+                    } else if (rev && rev.status === "error") {
+                      const tries = rev.retry_count || 1;
+                      const errDetail = rev.error_message
+                        ? ` — ${escapeHtml(String(rev.error_message).slice(0, 120))}`
+                        : "";
+                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B45309;">🔄 Hệ thống đang chờ chấm lại (lần thử ${tries}/20)${errDetail}</span>`;
+                    } else if (isOverdueUngraded) {
+                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B91C1C;">⚠️ Đã quá hạn ${RELEASE_HOURS} tiếng nhưng chưa có bài sửa — bấm “Tạo bài sửa” để chấm ngay.</span>`;
+                    } else if (sub.aiStatus === "pending" || sub.aiStatus === "pending_retry") {
+                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đang trong hàng đợi chấm tự động (trả sau ${RELEASE_HOURS} tiếng).</span>`;
+                    }
+
                     return `
                       <div class="submission-review-card">
                         <div class="submission-review-top">
                           <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
-                            <span style="font-size:14.5px;font-weight:800;color:#18181B;">
-                              👤 ${escapeHtml(sub.studentName)}
+                            <span style="font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:4px;${taskBadgeStyle}">
+                              ${escapeHtml(sub.taskLabel)}
                             </span>
-                            ${renderClassBadge(sub.studentClass)}
-                            <span style="font-size:12.5px;color:#71717A;">(${escapeHtml(sub.studentEmail)})</span>
-                            <span style="color:#D4D4D8;">|</span>
-                            <span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:4px;${badgeStyle}">
+                            <span style="font-size:12.5px;font-weight:700;color:#18181B;background:#FAF8F3;border:1px solid #E4E4E7;padding:2px 8px;border-radius:4px;">
                               ${escapeHtml(sub.lessonTitle)}
                             </span>
                             <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;font-weight:700;color:#27272A;background:#F4F4F5;padding:2px 8px;border-radius:4px;">
                               Level ${escapeHtml(sub.targetLevel)} · ${sub.wordCount} từ
                             </span>
+                            ${
+                              sub.evaluatedBand
+                                ? `<span class="ai-band-badge ${getBandToneClass(sub.evaluatedBand)}">${escapeHtml(sub.evaluatedBand)}</span>`
+                                : ""
+                            }
                           </div>
 
                           <div>
@@ -778,73 +1095,59 @@
 
                         <div class="teacher-writing-body">${escapeHtml(sub.content || "(Bài viết trống)")}</div>
 
-                        ${(() => {
-                          const rev = sub.aiReview;
-                          const isGrading = tState.gradingSubId === sub.submissionId;
-                          const isReleasing = tState.releasingSubId === sub.submissionId;
-                          const hasReadyReview = Boolean(rev && rev.status === "ready" && rev.review_json);
-                          const relMs = rev && rev.release_at ? new Date(rev.release_at).getTime() : 0;
-                          const isWaiting12h = hasReadyReview && relMs > Date.now();
-                          const remain = isWaiting12h ? CLOUD.formatRemainingTime(rev.release_at) : "";
-                          const errCount = hasReadyReview && Array.isArray(rev.review_json.corrections) ? rev.review_json.corrections.length : 0;
-
-                          let statusHtml = `<span style="font-size:12.5px;color:#52525B;">Chưa có bài sửa chi tiết AI.</span>`;
-                          if (hasReadyReview && isWaiting12h) {
-                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Bài sửa AI đã sẵn sàng · Hẹn trả học viên lúc ${escapeHtml(CLOUD.formatDateTime(rev.release_at))} (còn ${escapeHtml(remain)})</span>`;
-                          } else if (hasReadyReview) {
-                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#166534;">✅ Đã trả bài sửa cho học viên (${escapeHtml(CLOUD.formatDateTime(rev.release_at))}) · ${rev.student_seen_at ? "Học viên đã xem" : "Học viên chưa xem"}</span>`;
-                          } else if (rev && rev.status === "error") {
-                            const tries = rev.retry_count || 1;
-                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#B45309;">🔄 AI tạm quá tải (lần thử ${tries}/20) — hệ thống sẽ tự động chấm lại mỗi 5 phút trước giờ trả bài.</span>`;
-                          } else if (sub.aiStatus === "pending" || sub.aiStatus === "pending_retry") {
-                            statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đang nằm trong hàng đợi tự động chấm (hẹn trả sau 12 tiếng).</span>`;
-                          }
-
-                          return `
-                            <div class="teacher-ai-bar">
-                              <div>${statusHtml}</div>
-                              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                ${
-                                  isWaiting12h
-                                    ? `<button type="button" class="top-pill-btn yellow" data-release-now="${escapeHtml(sub.submissionId)}" ${isReleasing ? "disabled" : ""}>
-                                        ${isReleasing ? "Đang trả..." : "⚡ Trả bài sửa ngay"}
-                                      </button>`
-                                    : ""
-                                }
-                                <button type="button" class="top-pill-btn" data-ai-grade="${escapeHtml(sub.submissionId)}" ${isGrading ? "disabled" : ""}>
-                                  ${isGrading ? "⏳ Đang chấm AI..." : hasReadyReview ? "↻ Chấm lại AI" : "✨ Tạo bài sửa AI"}
-                                </button>
-                              </div>
-                            </div>
+                        <div class="teacher-ai-bar">
+                          <div>${statusHtml}</div>
+                          <div class="teacher-ai-actions">
                             ${
-                              hasReadyReview
-                                ? `
-                                  <details class="teacher-ai-details">
-                                    <summary>📝 Xem bài sửa chi tiết (${errCount} lỗi · Level ${escapeHtml(rev.target_level || sub.targetLevel)}${rev.review_json.estimated_band ? ` · ${escapeHtml(rev.review_json.estimated_band)}` : ""})</summary>
-                                    ${CLOUD.renderWritingReviewHtml(sub.content || "", rev.review_json, {
-                                      targetLevel: rev.target_level || sub.targetLevel
-                                    })}
-                                  </details>
-                                `
+                              isWaiting12h
+                                ? `<button type="button" class="top-pill-btn yellow" data-release-now="${escapeHtml(sub.submissionId)}" ${isReleasing ? "disabled" : ""}>
+                                    ${isReleasing ? "Đang trả..." : "⚡ Trả bài sửa ngay"}
+                                  </button>`
                                 : ""
                             }
-                          `;
-                        })()}
+                            <button type="button" class="top-pill-btn" data-ai-grade="${escapeHtml(sub.submissionId)}" ${isGrading ? "disabled" : ""}>
+                              ${isGrading ? "⏳ Đang chấm..." : hasReadyReview ? "↻ Chấm lại" : "✨ Tạo bài sửa"}
+                            </button>
+                            <button
+                              type="button"
+                              class="top-pill-btn"
+                              style="color:#B91C1C;border-color:#FCA5A5;background:#FEF2F2;"
+                              data-delete-submission="${escapeHtml(sub.submissionId)}"
+                              ${tState.deletingSubId === sub.submissionId ? "disabled" : ""}
+                              title="Xoá bài nộp này để học viên viết lại"
+                            >
+                              ${tState.deletingSubId === sub.submissionId ? "Đang xoá..." : "🗑️ Xoá bài nộp"}
+                            </button>
+                          </div>
+                        </div>
+
+                        ${
+                          hasReadyReview
+                            ? `
+                              <details class="teacher-ai-details">
+                                <summary>
+                                  📝 Xem chi tiết bài sửa (${errCount} lỗi · Level ${escapeHtml(rev.target_level || sub.targetLevel)}${sub.evaluatedBand ? ` · ${escapeHtml(sub.evaluatedBand)}` : ""})
+                                </summary>
+                                ${CLOUD.renderWritingReviewHtml(sub.content || "", rev.review_json, {
+                                  targetLevel: rev.target_level || sub.targetLevel
+                                })}
+                              </details>
+                            `
+                            : ""
+                        }
 
                         <div class="grade-row">
                           <input
                             type="text"
-                            class="form-input"
-                            style="height:36px;font-size:13px;width:140px;font-weight:700;"
-                            placeholder="Điểm (VD: 7.5 / B2)"
+                            class="form-input grade-score-input"
+                            placeholder="Điểm / Mức (VD: 7.5 · B2)"
                             value="${escapeHtml(sub.teacherScore)}"
                             id="inp-score-${escapeHtml(sub.submissionId)}"
                           />
                           <input
                             type="text"
-                            class="form-input"
-                            style="height:36px;font-size:13px;flex:1;min-width:220px;"
-                            placeholder="Nhận xét chấm bài của Giáo viên (học viên sẽ thấy ngay dưới bài viết)..."
+                            class="form-input grade-fb-input"
+                            placeholder="Nhận xét thêm của Giáo viên (hiển thị ngay dưới bài viết)..."
                             value="${escapeHtml(sub.teacherFeedback)}"
                             id="inp-fb-${escapeHtml(sub.submissionId)}"
                           />
@@ -864,10 +1167,189 @@
         `;
       }
 
+      function renderStudentInfoModal() {
+        if (!tState.infoModalStudentId) return "";
+        const st = tState.students.find(s => s.id === tState.infoModalStudentId);
+        if (!st) return "";
+
+        return `
+          <div class="modal-backdrop" id="student-info-backdrop">
+            <div class="modal-panel student-info-modal-panel" onclick="event.stopPropagation()">
+              <div class="modal-header">
+                <div>
+                  <h2 style="font-size:16.5px;font-weight:900;color:#18181B;">
+                    Thông tin học viên
+                  </h2>
+                </div>
+                <button type="button" class="close-modal-btn" id="btn-close-student-info" aria-label="Đóng">✕</button>
+              </div>
+
+              <div class="modal-body">
+                <div class="student-info-list">
+                  <div class="student-info-row">
+                    <span class="student-info-label">Họ và tên</span>
+                    <span class="student-info-value">
+                      <strong>${escapeHtml(st.name)}</strong>
+                      ${st.className ? ` ${renderClassBadge(st.className)}` : ""}
+                    </span>
+                  </div>
+
+                  <div class="student-info-row">
+                    <span class="student-info-label">Địa chỉ Email</span>
+                    <span class="student-info-value" style="word-break:break-all;">${escapeHtml(st.email || "—")}</span>
+                  </div>
+
+                  <div class="student-info-row">
+                    <span class="student-info-label">Đăng nhập qua</span>
+                    <span class="student-info-value">
+                      <span class="provider-pill ${st.authProvider === "google" ? "google" : ""}">
+                        ${st.authProvider === "google" ? "Google" : "Email"}
+                      </span>
+                    </span>
+                  </div>
+
+                  <div class="student-info-row">
+                    <span class="student-info-label">Bài đã nộp</span>
+                    <span class="student-info-value">
+                      <strong>${st.submittedCount}</strong> bài (Task 1: ${st.task1Count} · Task 2: ${st.task2Count})
+                    </span>
+                  </div>
+
+                  <div class="student-info-row">
+                    <span class="student-info-label">Ngày tham gia</span>
+                    <span class="student-info-value">${escapeHtml(st.createdAt || "—")}</span>
+                  </div>
+
+                  <div class="student-info-row">
+                    <span class="student-info-label">Hoạt động gần nhất</span>
+                    <span class="student-info-value">${escapeHtml(st.lastActiveAt || "—")}</span>
+                  </div>
+                </div>
+
+                ${
+                  st.id !== tState.teacherUserId
+                    ? `
+                    <div class="student-info-danger-box">
+                      <button
+                        type="button"
+                        class="btn-danger-outline"
+                        style="width:100%;justify-content:center;height:38px;"
+                        data-delete-student="${escapeHtml(st.id)}"
+                        data-delete-student-name="${escapeHtml(st.name)}"
+                        data-delete-student-email="${escapeHtml(st.email)}"
+                        ${tState.deletingUserId === st.id ? "disabled" : ""}
+                      >
+                        ${tState.deletingUserId === st.id ? "Đang xoá tài khoản..." : "🗑️ Xoá tài khoản học viên"}
+                      </button>
+                    </div>
+                  `
+                    : ""
+                }
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderTeacherDashboard() {
+        const totalSubmitted = tState.submissions.filter(s => s.isSubmitted).length;
+        const totalUngraded = tState.submissions.filter(
+          s => s.isSubmitted && !hasAnyFeedbackOrReview(s)
+        ).length;
+        const pendingAiCount = tState.submissions.filter(
+          s => s.isSubmitted && (!s.aiReview || s.aiReview.status !== "ready")
+        ).length;
+
+        const selectedStudentObj = tState.selectedStudentId
+          ? tState.students.find(s => s.id === tState.selectedStudentId)
+          : null;
+
+        return `
+          <div class="teacher-shell">
+            <header class="dt-topbar teacher-clean-topbar">
+              <div class="dt-topbar-inner">
+                <div class="dt-topbar-left-group">
+                  <button
+                    type="button"
+                    class="ej-sb-logo-btn"
+                    id="btn-brand-reset-view"
+                    title="Về danh sách học viên"
+                  >
+                    <span class="ej-sb-logo-badge">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </span>
+                    <div class="ej-sb-logo-text">
+                      <span class="ej-sb-logo-main">Quản lý Học viên</span>
+                      <span class="ej-sb-logo-sub">VSTEP Writing</span>
+                    </div>
+                  </button>
+                </div>
+
+                <div class="dt-topbar-right-group teacher-topbar-right">
+                  <a href="./index.html?mode=practice" class="top-pill-btn" style="text-decoration:none;" title="Xem giao diện luyện tập của học viên">
+                    <span>← <span class="topbar-label-full">Trang học</span></span>
+                  </a>
+
+                  ${
+                    pendingAiCount > 0
+                      ? `<button type="button" class="top-pill-btn yellow" id="btn-flush-queue" ${tState.flushingQueue ? "disabled" : ""}>
+                          <span>${tState.flushingQueue ? "⏳..." : `🔄 Chấm chờ (${pendingAiCount})`}</span>
+                        </button>`
+                      : ""
+                  }
+
+                  <button type="button" class="top-pill-btn" id="btn-refresh-data" title="Làm mới dữ liệu">
+                    <span>${tState.loading ? "⏳" : "↻"} <span class="topbar-label-full">Làm mới</span></span>
+                  </button>
+
+                  <button type="button" class="top-pill-btn yellow" id="btn-export-csv" title="Xuất báo cáo Excel (.csv)">
+                    <span>📊 <span class="topbar-label-full">Xuất Excel</span></span>
+                  </button>
+
+                  ${renderAccountMenuHtml()}
+                </div>
+              </div>
+            </header>
+
+            <main class="teacher-compact-container">
+              ${
+                tState.dbError
+                  ? `<div style="padding:12px 16px;border:2px solid #DC2626;background:#FEF2F2;color:#B91C1C;font-size:13.5px;font-weight:700;margin-bottom:16px;border-radius:8px;">⚠️ ${escapeHtml(tState.dbError)}</div>`
+                  : ""
+              }
+
+              <div class="teacher-stats-grid teacher-stats-3col">
+                <div class="teacher-stat-card">
+                  <div class="teacher-stat-label">Tổng số học viên</div>
+                  <div class="teacher-stat-value">${tState.students.length}</div>
+                </div>
+                <div class="teacher-stat-card">
+                  <div class="teacher-stat-label">Bài đã nộp chính thức</div>
+                  <div class="teacher-stat-value" style="color:#15803D;">${totalSubmitted}</div>
+                </div>
+                <div class="teacher-stat-card">
+                  <div class="teacher-stat-label">Bài chờ chấm / nhận xét</div>
+                  <div class="teacher-stat-value" style="color:#B45309;">${totalUngraded}</div>
+                </div>
+              </div>
+
+              ${
+                selectedStudentObj
+                  ? renderStudentSubmissionsSection(selectedStudentObj)
+                  : renderStudentsTableSection()
+              }
+            </main>
+          </div>
+          ${renderStudentInfoModal()}
+        `;
+      }
+
       function renderTeacherApp() {
         const root = document.getElementById("teacher-app");
         if (!root) return;
-        if (tState.unauthorizedEmail) {
+        if (tState.checkingAuth) {
+          root.innerHTML = renderCheckingAuthView();
+        } else if (tState.unauthorizedEmail) {
           root.innerHTML = renderUnauthorizedView();
         } else if (tState.authenticated) {
           root.innerHTML = renderTeacherDashboard();
@@ -877,6 +1359,9 @@
         bindTeacherEvents();
       }
 
+      // ======================================================================
+      // EVENT BINDING
+      // ======================================================================
       function bindTeacherEvents() {
         const btnGoogle = document.getElementById("btn-teacher-google-login");
         if (btnGoogle) {
@@ -919,9 +1404,19 @@
           };
         }
 
+        const btnToggleAcc = document.getElementById("btn-toggle-account-menu");
+        if (btnToggleAcc) {
+          btnToggleAcc.onclick = e => {
+            e.stopPropagation();
+            tState.accountMenuOpen = !tState.accountMenuOpen;
+            renderTeacherApp();
+          };
+        }
+
         const btnLogout = document.getElementById("btn-teacher-logout");
         if (btnLogout) {
           btnLogout.onclick = async () => {
+            tState.accountMenuOpen = false;
             const client = CLOUD.getClient();
             if (client) {
               try {
@@ -933,6 +1428,26 @@
             tState.teacherEmail = "";
             tState.teacherUserId = "";
             tState.deletingUserId = "";
+            tState.selectedStudentId = "";
+            tState.infoModalStudentId = "";
+            renderTeacherApp();
+          };
+        }
+
+        const btnBrandReset = document.getElementById("btn-brand-reset-view");
+        if (btnBrandReset) {
+          btnBrandReset.onclick = () => {
+            tState.selectedStudentId = "";
+            tState.filterStatus = "all";
+            renderTeacherApp();
+          };
+        }
+
+        const btnBackStudents = document.getElementById("btn-back-to-students");
+        if (btnBackStudents) {
+          btnBackStudents.onclick = () => {
+            tState.selectedStudentId = "";
+            tState.filterStatus = "all";
             renderTeacherApp();
           };
         }
@@ -949,23 +1464,48 @@
 
         const btnExportCsv = document.getElementById("btn-export-csv");
         if (btnExportCsv) {
-          btnExportCsv.onclick = () => exportCsvReport(getFilteredSubmissions());
+          btnExportCsv.onclick = () =>
+            exportCsvReport(getFilteredSubmissionsForStudent(tState.selectedStudentId || ""));
         }
 
-        document.querySelectorAll("[data-teacher-tab]").forEach(btn => {
-          btn.onclick = () => {
-            tState.activeTab = btn.getAttribute("data-teacher-tab");
+        const btnResetFilters = document.getElementById("btn-reset-filters");
+        if (btnResetFilters) {
+          btnResetFilters.onclick = () => {
+            if (!tState.selectedStudentId) {
+              tState.searchNameQuery = "";
+              tState.filterClass = "all";
+            }
+            tState.filterLevel = "all";
+            tState.filterTask = "all";
+            tState.filterLesson = "all";
+            tState.filterStatus = "all";
+            renderTeacherApp();
+          };
+        }
+
+        document.querySelectorAll("[data-open-student-info]").forEach(btn => {
+          btn.onclick = e => {
+            e.stopPropagation();
+            tState.infoModalStudentId = btn.getAttribute("data-open-student-info") || "";
             renderTeacherApp();
           };
         });
 
+        ["student-info-backdrop", "btn-close-student-info"].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.onclick = () => {
+              tState.infoModalStudentId = "";
+              renderTeacherApp();
+            };
+          }
+        });
+
         document.querySelectorAll("[data-view-student-subs]").forEach(btn => {
           btn.onclick = () => {
-            tState.filterStudent = btn.getAttribute("data-view-student-subs");
-            tState.filterClass = "all";
-            tState.searchNameQuery = "";
-            tState.activeTab = "submissions";
+            tState.selectedStudentId = btn.getAttribute("data-view-student-subs") || "";
             renderTeacherApp();
+            window.scrollTo({ top: 0, behavior: "smooth" });
           };
         });
 
@@ -997,20 +1537,14 @@
         if (selFilterClass) {
           selFilterClass.onchange = e => {
             tState.filterClass = e.target.value;
-            if (tState.filterStudent !== "all") {
-              const stObj = tState.students.find(s => s.email === tState.filterStudent);
-              if (!stObj || !matchesClassFilter(stObj.className)) {
-                tState.filterStudent = "all";
-              }
-            }
             renderTeacherApp();
           };
         }
 
-        const selStudent = document.getElementById("sel-filter-student");
-        if (selStudent) {
-          selStudent.onchange = e => {
-            tState.filterStudent = e.target.value;
+        const selFilterLevel = document.getElementById("sel-filter-level");
+        if (selFilterLevel) {
+          selFilterLevel.onchange = e => {
+            tState.filterLevel = e.target.value;
             renderTeacherApp();
           };
         }
@@ -1020,10 +1554,8 @@
           selTask.onchange = e => {
             tState.filterTask = e.target.value;
             if (tState.filterLesson !== "all") {
-              const lessonObj = lessonById[tState.filterLesson];
-              if (tState.filterTask !== "all" && lessonObj && lessonObj.taskType !== tState.filterTask) {
-                tState.filterLesson = "all";
-              }
+              const stillValid = getVisibleLessonsForTask().some(l => l.id === tState.filterLesson);
+              if (!stillValid) tState.filterLesson = "all";
             }
             renderTeacherApp();
           };
@@ -1065,11 +1597,31 @@
         document.querySelectorAll("[data-release-now]").forEach(btn => {
           btn.onclick = () => releaseAiReviewNow(btn.getAttribute("data-release-now"));
         });
+
+        document.querySelectorAll("[data-delete-submission]").forEach(btn => {
+          btn.onclick = () => deleteSubmissionForRetry(btn.getAttribute("data-delete-submission"));
+        });
       }
+
+      document.addEventListener("click", e => {
+        if (tState.accountMenuOpen && !e.target.closest("#teacher-account-menu-wrap")) {
+          tState.accountMenuOpen = false;
+          renderTeacherApp();
+        }
+      });
+
+      document.addEventListener("keydown", e => {
+        if (e.key === "Escape" && (tState.accountMenuOpen || tState.infoModalStudentId)) {
+          tState.accountMenuOpen = false;
+          tState.infoModalStudentId = "";
+          renderTeacherApp();
+        }
+      });
 
       window.addEventListener("DOMContentLoaded", async () => {
         const client = CLOUD.getClient();
         if (!client) {
+          tState.checkingAuth = false;
           tState.authError = "Chưa cấu hình kết nối Supabase.";
           renderTeacherApp();
           return;
@@ -1079,17 +1631,23 @@
         const { data } = await client.auth.getSession();
         if (data && data.session && data.session.user) {
           await verifyAndLoadCloudTeacher(data.session.user);
+        } else {
+          tState.checkingAuth = false;
+          renderTeacherApp();
         }
 
         client.auth.onAuthStateChange(async (event, session) => {
           if (event === "SIGNED_IN" && session && session.user && !tState.authenticated && !tState.unauthorizedEmail) {
             await verifyAndLoadCloudTeacher(session.user);
           } else if (event === "SIGNED_OUT") {
+            tState.checkingAuth = false;
             tState.authenticated = false;
             tState.unauthorizedEmail = "";
             tState.teacherEmail = "";
             tState.teacherUserId = "";
             tState.deletingUserId = "";
+            tState.selectedStudentId = "";
+            tState.infoModalStudentId = "";
             renderTeacherApp();
           }
         });
