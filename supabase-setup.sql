@@ -28,8 +28,8 @@ create index if not exists idx_teachers_lower_email
 alter table public.teachers enable row level security;
 
 insert into public.teachers (email, full_name)
-values ('mtung0208@gmail.com', 'Giáo viên')
-on conflict (email) do nothing;
+values ('mtung0208@gmail.com', 'admin')
+on conflict (email) do update set full_name = excluded.full_name;
 
 create or replace function public.is_teacher()
 returns boolean

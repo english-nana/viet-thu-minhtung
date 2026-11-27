@@ -199,6 +199,21 @@ document.addEventListener('DOMContentLoaded', () => {
         return currentAccount && currentAccount.id ? `${baseKey}__${currentAccount.id}` : baseKey;
     }
 
+    const ADMIN_EMAIL = 'mtung0208@gmail.com';
+
+    function isAdminEmail(email) {
+        const lower = String(email || '').trim().toLowerCase();
+        return lower === ADMIN_EMAIL || lower.startsWith('mtung0208@');
+    }
+
+    function isAdminAccount() {
+        return Boolean(currentAccount && isAdminEmail(currentAccount.email));
+    }
+
+    function canPreviewSampleWithoutSubmit() {
+        return isAdminAccount() || authState.isTeacher;
+    }
+
     function getCloudSubmission(lessonId) {
         return (authState.submissionsByLessonId && authState.submissionsByLessonId[lessonId]) || null;
     }
@@ -1897,7 +1912,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function syncAdviceSampleUI(revealSample = false) {
-        if (!isCurrentAdviceSubmitted) {
+        const canViewSample = isCurrentAdviceSubmitted || canPreviewSampleWithoutSubmit();
+        if (!canViewSample) {
             populateAdviceSamples(currentAdvicePromptId, false);
             if (adviceFeedbackBox) {
                 adviceFeedbackBox.style.display = 'none';
@@ -1917,7 +1933,9 @@ document.addEventListener('DOMContentLoaded', () => {
         populateAdviceSamples(currentAdvicePromptId, true);
         const wc = countWordsClean(adviceTextarea ? adviceTextarea.value : '');
         if (adviceFeedbackTitle) {
-            adviceFeedbackTitle.textContent = `✓ Đã nộp bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`;
+            adviceFeedbackTitle.textContent = isCurrentAdviceSubmitted
+                ? `✓ Đã nộp bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`
+                : '👁️ Chế độ Admin · Xem trước bài mẫu chuẩn:';
         }
         if (adviceFeedbackBox) {
             adviceFeedbackBox.style.display = revealSample ? 'block' : 'none';
@@ -1928,10 +1946,12 @@ document.addEventListener('DOMContentLoaded', () => {
             advicePeekSampleBtn.innerHTML = revealSample
                 ? '<i class="fas fa-eye-slash"></i> Ẩn bài mẫu'
                 : '<i class="fas fa-eye"></i> Xem bài mẫu';
-            advicePeekSampleBtn.title = 'Ẩn / Hiện bài mẫu đối chiếu';
+            advicePeekSampleBtn.title = isCurrentAdviceSubmitted
+                ? 'Ẩn / Hiện bài mẫu đối chiếu'
+                : 'Chế độ Admin: Xem trước bài mẫu không cần nộp bài';
         }
         if (adviceSubmitBtn && !authState.isSubmittingAdvice) {
-            adviceSubmitBtn.textContent = 'Nộp lại';
+            adviceSubmitBtn.textContent = isCurrentAdviceSubmitted ? 'Nộp lại' : 'Nộp bài';
         }
     }
 
@@ -1955,6 +1975,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 adviceStatusEl.textContent = canSubmit
                     ? `✓ Đã nộp (${wc} từ) · Đã mở khóa bài mẫu`
                     : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp lại`;
+            } else if (canPreviewSampleWithoutSubmit()) {
+                adviceStatusEl.textContent = canSubmit
+                    ? `${wc}/${minW} từ · Đủ điều kiện nộp bài · Admin có thể xem trước bài mẫu`
+                    : `${wc}/${minW} từ · Admin có thể xem trước bài mẫu không cần nộp bài`;
             } else {
                 adviceStatusEl.textContent = canSubmit
                     ? `${wc}/${minW} từ · Đủ điều kiện — bấm Nộp bài để gửi Giáo viên & xem bài mẫu`
@@ -2154,7 +2178,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (advicePeekSampleBtn && adviceFeedbackBox) {
         advicePeekSampleBtn.addEventListener('click', () => {
-            if (!isCurrentAdviceSubmitted) return;
+            if (!isCurrentAdviceSubmitted && !canPreviewSampleWithoutSubmit()) return;
             const isHidden = adviceFeedbackBox.style.display === 'none' || adviceFeedbackBox.style.display === '';
             syncAdviceSampleUI(isHidden);
             if (isHidden) {
@@ -2814,7 +2838,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function syncInquirySampleUI(revealSample = false) {
-        if (!isCurrentInquirySubmitted) {
+        const canViewSample = isCurrentInquirySubmitted || canPreviewSampleWithoutSubmit();
+        if (!canViewSample) {
             populateInquirySamples(currentInquiryPromptId, false);
             if (inquiryFeedbackBox) {
                 inquiryFeedbackBox.style.display = 'none';
@@ -2834,7 +2859,9 @@ document.addEventListener('DOMContentLoaded', () => {
         populateInquirySamples(currentInquiryPromptId, true);
         const wc = countWordsClean(inquiryTextarea ? inquiryTextarea.value : '');
         if (inquiryFeedbackTitle) {
-            inquiryFeedbackTitle.textContent = `✓ Đã nộp bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`;
+            inquiryFeedbackTitle.textContent = isCurrentInquirySubmitted
+                ? `✓ Đã nộp bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`
+                : '👁️ Chế độ Admin · Xem trước bài mẫu chuẩn:';
         }
         if (inquiryFeedbackBox) {
             inquiryFeedbackBox.style.display = revealSample ? 'block' : 'none';
@@ -2845,10 +2872,12 @@ document.addEventListener('DOMContentLoaded', () => {
             inquiryPeekSampleBtn.innerHTML = revealSample
                 ? '<i class="fas fa-eye-slash"></i> Ẩn bài mẫu'
                 : '<i class="fas fa-eye"></i> Xem bài mẫu';
-            inquiryPeekSampleBtn.title = 'Ẩn / Hiện bài mẫu đối chiếu';
+            inquiryPeekSampleBtn.title = isCurrentInquirySubmitted
+                ? 'Ẩn / Hiện bài mẫu đối chiếu'
+                : 'Chế độ Admin: Xem trước bài mẫu không cần nộp bài';
         }
         if (inquirySubmitBtn && !authState.isSubmittingInquiry) {
-            inquirySubmitBtn.textContent = 'Nộp lại';
+            inquirySubmitBtn.textContent = isCurrentInquirySubmitted ? 'Nộp lại' : 'Nộp bài';
         }
     }
 
@@ -2872,6 +2901,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 inquiryStatusEl.textContent = canSubmit
                     ? `✓ Đã nộp (${wc} từ) · Đã mở khóa bài mẫu`
                     : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp lại`;
+            } else if (canPreviewSampleWithoutSubmit()) {
+                inquiryStatusEl.textContent = canSubmit
+                    ? `${wc}/${minW} từ · Đủ điều kiện nộp bài · Admin có thể xem trước bài mẫu`
+                    : `${wc}/${minW} từ · Admin có thể xem trước bài mẫu không cần nộp bài`;
             } else {
                 inquiryStatusEl.textContent = canSubmit
                     ? `${wc}/${minW} từ · Đủ điều kiện — bấm Nộp bài để gửi Giáo viên & xem bài mẫu`
@@ -3067,7 +3100,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (inquiryPeekSampleBtn && inquiryFeedbackBox) {
         inquiryPeekSampleBtn.addEventListener('click', () => {
-            if (!isCurrentInquirySubmitted) return;
+            if (!isCurrentInquirySubmitted && !canPreviewSampleWithoutSubmit()) return;
             const isHidden = inquiryFeedbackBox.style.display === 'none' || inquiryFeedbackBox.style.display === '';
             syncInquirySampleUI(isHidden);
             if (isHidden) {
@@ -3865,10 +3898,10 @@ document.addEventListener('DOMContentLoaded', () => {
             topbarAccountPill.style.display = 'inline-flex';
         }
         if (topbarUserInitials && CLOUD) {
-            topbarUserInitials.textContent = CLOUD.getInitials(currentAccount.name);
+            topbarUserInitials.textContent = isAdminAccount() ? 'AD' : CLOUD.getInitials(currentAccount.name);
         }
         if (topbarUserName) {
-            topbarUserName.textContent = currentAccount.name || currentAccount.email;
+            topbarUserName.textContent = isAdminAccount() ? 'admin' : (currentAccount.name || currentAccount.email);
         }
         renderNotificationBell();
         renderMySubmissionsView();
@@ -3902,6 +3935,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (adviceTextarea) adviceTextarea.value = '';
         if (inquiryTextarea) inquiryTextarea.value = '';
         if (essayTextarea) essayTextarea.value = '';
+        isCurrentAdviceSubmitted = false;
+        isCurrentInquirySubmitted = false;
+        syncAdviceSampleUI(false);
+        syncInquirySampleUI(false);
+        updateAdviceWordState();
+        updateInquiryWordState();
         renderTeacherFeedbackBox(adviceTeacherFeedbackBox, null);
         renderTeacherFeedbackBox(inquiryTeacherFeedbackBox, null);
         renderTeacherFeedbackBox(essayTeacherFeedbackBox, null);
@@ -4319,7 +4358,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const email = String(sessionUser.email || '').trim().toLowerCase();
             const wantsPracticeMode = new URLSearchParams(window.location.search).get('mode') === 'practice';
-            const isPrimaryTeacherEmail = email === 'mtung0208@gmail.com';
+            const isPrimaryTeacherEmail = isAdminEmail(email);
 
             // Tự động chuyển thẳng tài khoản Giáo viên (mtung0208@gmail.com) vào Trang Giáo viên
             if (isPrimaryTeacherEmail && !wantsPracticeMode) {
@@ -4362,9 +4401,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     : fallbackName;
             const parsed = CLOUD.parseFullNameAndClass(rawStoredName);
             const metaClass = String(meta.class_name || '').trim().toUpperCase();
-            const resolvedClass = parsed.className || (CLOUD.CLASS_LIST.includes(metaClass) ? metaClass : '');
-            const resolvedName = parsed.fullName || fallbackName;
-            const storedFullName = CLOUD.formatStoredFullName(resolvedName, resolvedClass);
+            const resolvedClass = isPrimaryTeacherEmail
+                ? ''
+                : (parsed.className || (CLOUD.CLASS_LIST.includes(metaClass) ? metaClass : ''));
+            const resolvedName = isPrimaryTeacherEmail ? 'admin' : (parsed.fullName || fallbackName);
+            const storedFullName = isPrimaryTeacherEmail ? 'admin' : CLOUD.formatStoredFullName(resolvedName, resolvedClass);
 
             try {
                 await client.from('profiles').upsert(
