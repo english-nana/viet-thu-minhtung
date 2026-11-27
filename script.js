@@ -323,9 +323,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let mounted = false;
-        let toolbarEl = null;
-        let toggleBtnEl = null;
-        let toggleLabelEl = null;
         let editorEl = null;
         let isRedMode = false;
         let isComposing = false;
@@ -356,12 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const updateToolbarUI = () => {
-            if (!toggleBtnEl || !toggleLabelEl || !editorEl) return;
-            toggleBtnEl.classList.toggle('is-red', isRedMode);
-            toggleBtnEl.setAttribute('aria-pressed', isRedMode ? 'true' : 'false');
-            toggleLabelEl.textContent = isRedMode
-                ? 'Chữ đỏ (Dịch tiếng Việt)'
-                : 'Chữ đen (Tiếng Anh)';
+            if (!editorEl) return;
             editorEl.classList.toggle('is-red-mode', isRedMode);
         };
 
@@ -630,28 +622,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mounted) return;
             mounted = true;
 
-            toolbarEl = document.createElement('div');
-            toolbarEl.className = 'admin-rich-toolbar';
-
-            toggleBtnEl = document.createElement('button');
-            toggleBtnEl.type = 'button';
-            toggleBtnEl.className = 'admin-color-toggle-btn';
-            toggleBtnEl.title = 'Chuyển màu chữ giữa Đen (Tiếng Anh) và Đỏ (Dịch tiếng Việt)';
-
-            const dot = document.createElement('span');
-            dot.className = 'admin-color-dot';
-            toggleLabelEl = document.createElement('span');
-            toggleLabelEl.textContent = 'Chữ đen (Tiếng Anh)';
-            toggleBtnEl.appendChild(dot);
-            toggleBtnEl.appendChild(toggleLabelEl);
-
-            const hintEl = document.createElement('span');
-            hintEl.className = 'admin-rich-hint';
-            hintEl.textContent = 'Nhấn ⌥ Option hoặc ⌃ Control để đổi màu';
-
-            toolbarEl.appendChild(toggleBtnEl);
-            toolbarEl.appendChild(hintEl);
-
             editorEl = document.createElement('div');
             editorEl.className = isEssay
                 ? 'draft-writing-textarea ej-textarea admin-rich-editor'
@@ -662,18 +632,9 @@ document.addEventListener('DOMContentLoaded', () => {
             editorEl.setAttribute('aria-multiline', 'true');
             editorEl.setAttribute('data-placeholder', textarea.placeholder || '');
 
-            textarea.parentNode.insertBefore(toolbarEl, textarea);
             textarea.parentNode.insertBefore(editorEl, textarea.nextSibling);
             textarea.style.display = 'none';
-            toolbarEl.style.display = 'flex';
             editorEl.style.display = 'block';
-
-            toggleBtnEl.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-            });
-            toggleBtnEl.addEventListener('click', () => {
-                toggleColorMode();
-            });
 
             editorEl.addEventListener('compositionstart', () => {
                 isComposing = true;
@@ -861,14 +822,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     textarea.style.display === 'none';
                 ensureMounted();
                 textarea.style.display = 'none';
-                toolbarEl.style.display = 'flex';
                 editorEl.style.display = 'block';
                 if (!alreadyActive) {
                     const storageKey = typeof getStorageKey === 'function' ? getStorageKey() : '';
                     setFromTextarea(storageKey);
                 }
             } else if (mounted) {
-                toolbarEl.style.display = 'none';
                 editorEl.style.display = 'none';
                 editorEl.innerHTML = '';
                 textarea.style.display = '';
