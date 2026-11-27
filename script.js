@@ -326,6 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let editorEl = null;
         let isRedMode = false;
         let isComposing = false;
+        let pendingCaretSpanAfterCompose = false;
         let modTap = null;
 
         const getRichKey = (storageKey) => (storageKey ? `${storageKey}__admin_rich` : '');
@@ -438,22 +439,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         };
 
-        const normalizeColorNodes = () => {
-            if (!editorEl) return;
-            editorEl.querySelectorAll('font, span').forEach(el => {
-                if (el.classList.contains('admin-seg-red') || el.classList.contains('admin-seg-black')) {
-                    return;
-                }
-                const col = (el.style && el.style.color) || el.getAttribute('color') || '';
-                if (!col) return;
-                const isRed = isRedCssColor(col);
-                el.removeAttribute('color');
-                el.style.cssText = '';
-                el.className = isRed ? 'admin-seg-red' : 'admin-seg-black';
-                el.style.color = isRed ? ADMIN_RED_HEX : ADMIN_BLACK_HEX;
-            });
-        };
-
         const placeCaretAtEndOfNode = (node) => {
             const sel = window.getSelection();
             if (!sel) return;
@@ -467,6 +452,74 @@ document.addEventListener('DOMContentLoaded', () => {
             r.collapse(true);
             sel.removeAllRanges();
             sel.addRange(r);
+        };
+
+        const removeEmptyColorSpans = () => {
+            if (!editorEl) return;
+            editorEl.querySelectorAll('span.admin-seg-red, span.admin-seg-black').forEach(sp => {
+                if ((sp.textContent || '').replace(/\u200B/g, '') === '' && !sp.querySelector('br')) {
+                    sp.remove();
+                }
+            });
+        };
+
+        const isCaretInMatchingColorSpan = () => {
+            if (!editorEl) return false;
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount || !sel.isCollapsed) return false;
+            const r = sel.getRangeAt(0);
+            if (!editorEl.contains(r.startContainer)) return false;
+            const span = findColorSpan(r.startContainer);
+            if (!span) return false;
+            return span.classList.contains('admin-seg-red') === isRedMode;
+        };
+
+        const isSelectionRed = (range) => {
+            if (!range || !editorEl) return isRedMode;
+            const startSpan = findColorSpan(range.startContainer);
+            if (startSpan && startSpan.classList.contains('admin-seg-red')) return true;
+            const redSpans = editorEl.querySelectorAll('span.admin-seg-red');
+            for (let i = 0; i < redSpans.length; i++) {
+                try {
+                    if (range.intersectsNode(redSpans[i])) return true;
+                } catch (e) {}
+            }
+            return false;
+        };
+
+        const recolorFragment = (frag, targetRed) => {
+            const rebuild = (node) => {
+                if (node.nodeType === 3) {
+                    const txt = (node.nodeValue || '').replace(/\u200B/g, '');
+                    if (!txt) return null;
+                    const sp = createColorSpan(targetRed);
+                    sp.textContent = txt;
+                    return sp;
+                }
+                if (node.nodeType !== 1) return null;
+                const tag = node.tagName;
+                if (tag === 'BR') return document.createElement('br');
+                if (tag === 'DIV' || tag === 'P') {
+                    const div = document.createElement('div');
+                    Array.from(node.childNodes).forEach(ch => {
+                        const c = rebuild(ch);
+                        if (c) div.appendChild(c);
+                    });
+                    return div;
+                }
+                const out = document.createDocumentFragment();
+                Array.from(node.childNodes).forEach(ch => {
+                    const c = rebuild(ch);
+                    if (c) out.appendChild(c);
+                });
+                return out;
+            };
+            const res = document.createDocumentFragment();
+            Array.from(frag.childNodes).forEach(ch => {
+                const c = rebuild(ch);
+                if (c) res.appendChild(c);
+            });
+            return res;
         };
 
         const prepareCaretSpan = (targetRed) => {
@@ -487,13 +540,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const existingSpan = findColorSpan(range.startContainer);
             if (existingSpan) {
-                const onlyZwsp = existingSpan.textContent === '\u200B';
-                if (onlyZwsp) {
+                const isEmptyOrZwsp =
+                    (existingSpan.textContent || '').replace(/\u200B/g, '') === '' &&
+                    !existingSpan.querySelector('br');
+                if (isEmptyOrZwsp) {
                     existingSpan.className = targetRed ? 'admin-seg-red' : 'admin-seg-black';
                     existingSpan.style.color = targetRed ? ADMIN_RED_HEX : ADMIN_BLACK_HEX;
-                    const tNode = existingSpan.firstChild;
-                    if (tNode && tNode.nodeType === 3) {
-                        placeCaretAtEndOfNode(tNode);
+                    if (existingSpan.firstChild && existingSpan.firstChild.nodeType === 3) {
+                        existingSpan.firstChild.nodeValue = '\u200B';
+                        placeCaretAtEndOfNode(existingSpan.firstChild);
+                    } else {
+                        existingSpan.innerHTML = '';
+                        const zw = document.createTextNode('\u200B');
+                        existingSpan.appendChild(zw);
+                        placeCaretAtEndOfNode(zw);
                     }
                     return;
                 }
@@ -541,51 +601,46 @@ document.addEventListener('DOMContentLoaded', () => {
             placeCaretAtEndOfNode(zwsp);
         };
 
-        const syncModeFromCaret = () => {
-            if (!editorEl || document.activeElement !== editorEl) return;
-            const sel = window.getSelection();
-            if (!sel || !sel.rangeCount) return;
-            const node = sel.anchorNode;
-            if (!node || !editorEl.contains(node)) return;
-            const span = findColorSpan(node);
-            if (!span) {
-                if (isRedMode) {
-                    isRedMode = false;
-                    updateToolbarUI();
-                }
-                return;
-            }
-            const nextRed = span.classList.contains('admin-seg-red');
-            if (nextRed !== isRedMode) {
-                isRedMode = nextRed;
-                updateToolbarUI();
-            }
-        };
-
         const toggleColorMode = () => {
             if (!editorEl || !isAdminAccount()) return;
             if (document.activeElement !== editorEl) {
                 editorEl.focus();
             }
-            const nextRed = !isRedMode;
             const sel = window.getSelection();
             const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
 
             if (range && !range.collapsed && editorEl.contains(range.commonAncestorContainer)) {
-                try {
-                    document.execCommand('styleWithCSS', false, true);
-                    document.execCommand('foreColor', false, nextRed ? ADMIN_RED_HEX : ADMIN_BLACK_HEX);
-                    normalizeColorNodes();
-                } catch (e) {}
-                isRedMode = nextRed;
+                const targetRed = !isSelectionRed(range);
+                const rawFrag = range.extractContents();
+                const recolored = recolorFragment(rawFrag, targetRed);
+                const nodes = Array.from(recolored.childNodes);
+                if (nodes.length > 0) {
+                    const firstNode = nodes[0];
+                    const lastNode = nodes[nodes.length - 1];
+                    range.insertNode(recolored);
+                    const nextSel = document.createRange();
+                    nextSel.setStartBefore(firstNode);
+                    nextSel.setEndAfter(lastNode);
+                    sel.removeAllRanges();
+                    sel.addRange(nextSel);
+                }
+                removeEmptyColorSpans();
+                isRedMode = targetRed;
+                pendingCaretSpanAfterCompose = false;
                 updateToolbarUI();
                 syncToTextareaAndSave();
                 return;
             }
 
+            const nextRed = !isRedMode;
             isRedMode = nextRed;
             updateToolbarUI();
-            prepareCaretSpan(nextRed);
+            if (isComposing) {
+                pendingCaretSpanAfterCompose = true;
+            } else {
+                pendingCaretSpanAfterCompose = false;
+                prepareCaretSpan(nextRed);
+            }
         };
 
         const renderPlainTextToEditor = (plain) => {
@@ -644,6 +699,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 isComposing = false;
                 cleanZeroWidthSpaces();
                 syncToTextareaAndSave();
+                if (pendingCaretSpanAfterCompose) {
+                    pendingCaretSpanAfterCompose = false;
+                    if (!isCaretInMatchingColorSpan()) {
+                        prepareCaretSpan(isRedMode);
+                    }
+                }
+            });
+
+            editorEl.addEventListener('beforeinput', (e) => {
+                if (!isAdminAccount() || isComposing) return;
+                if (e.inputType === 'insertText' || e.inputType === 'insertReplacementText') {
+                    const sel = window.getSelection();
+                    const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+                    if (!range || !editorEl.contains(range.commonAncestorContainer)) return;
+                    if (!range.collapsed) {
+                        range.deleteContents();
+                        removeEmptyColorSpans();
+                        prepareCaretSpan(isRedMode);
+                    } else if (!isCaretInMatchingColorSpan()) {
+                        prepareCaretSpan(isRedMode);
+                    }
+                }
             });
 
             editorEl.addEventListener('input', () => {
@@ -670,7 +747,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!sel || !sel.rangeCount) return;
                 const range = sel.getRangeAt(0);
                 range.deleteContents();
+                removeEmptyColorSpans();
+                if (findColorSpan(range.startContainer)) {
+                    prepareCaretSpan(isRedMode);
+                }
 
+                const selAfter = window.getSelection();
+                const insertRange = selAfter && selAfter.rangeCount ? selAfter.getRangeAt(0) : range;
                 const frag = document.createDocumentFragment();
                 const lines = text.replace(/\r\n?/g, '\n').split('\n');
                 let lastInserted = null;
@@ -687,7 +770,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         lastInserted = span.firstChild;
                     }
                 });
-                range.insertNode(frag);
+                insertRange.insertNode(frag);
                 if (lastInserted) {
                     placeCaretAtEndOfNode(lastInserted);
                 }
@@ -697,25 +780,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
             editorEl.addEventListener('keydown', (e) => {
                 if (!isAdminAccount()) return;
-                if (e.key === 'Fn' || e.key === 'F13') {
+                const isControlKey =
+                    e.key === 'Control' || e.code === 'ControlLeft' || e.code === 'ControlRight';
+                if (isControlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
                     if (!e.repeat) {
-                        e.preventDefault();
-                        toggleColorMode();
-                    }
-                    return;
-                }
-                if ((e.key === 'Alt' || e.key === 'Control') && !e.metaKey && !e.shiftKey) {
-                    const otherModHeld =
-                        (e.key === 'Alt' && e.ctrlKey) || (e.key === 'Control' && e.altKey);
-                    if (!otherModHeld && !e.repeat) {
-                        modTap = { key: e.key, downAt: Date.now(), dirty: false };
-                    } else if (otherModHeld && modTap) {
-                        modTap.dirty = true;
+                        modTap = { downAt: Date.now(), dirty: false };
                     }
                     return;
                 }
                 if (modTap) {
                     modTap.dirty = true;
+                }
+
+                if (isComposing && !e.isComposing && e.key.length === 1) {
+                    isComposing = false;
+                }
+
+                if (
+                    !isComposing &&
+                    !e.isComposing &&
+                    !e.ctrlKey &&
+                    !e.metaKey &&
+                    !e.altKey &&
+                    (e.key.length === 1 || e.key === 'Process')
+                ) {
+                    const sel = window.getSelection();
+                    const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+                    if (range && editorEl.contains(range.commonAncestorContainer)) {
+                        if (!range.collapsed) {
+                            range.deleteContents();
+                            removeEmptyColorSpans();
+                            prepareCaretSpan(isRedMode);
+                        } else if (!isCaretInMatchingColorSpan()) {
+                            prepareCaretSpan(isRedMode);
+                        }
+                    }
                 }
 
                 // Skip empty ZWSP-only placeholder span on Backspace so 1st Backspace deletes real text
@@ -745,43 +844,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
             editorEl.addEventListener('keyup', (e) => {
                 if (!isAdminAccount()) return;
-                if (modTap && e.key === modTap.key) {
+                const isControlKey =
+                    e.key === 'Control' || e.code === 'ControlLeft' || e.code === 'ControlRight';
+                if (modTap && isControlKey) {
                     const tap = modTap;
                     modTap = null;
-                    if (!tap.dirty && !isComposing && Date.now() - tap.downAt <= 500) {
+                    if (!tap.dirty && Date.now() - tap.downAt <= 1500) {
                         e.preventDefault();
                         toggleColorMode();
                     }
                     return;
                 }
-                if (e.key === 'Enter' && isRedMode) {
-                    const sel = window.getSelection();
-                    const node = sel && sel.rangeCount ? sel.anchorNode : null;
-                    if (node && editorEl.contains(node) && !findColorSpan(node)) {
-                        prepareCaretSpan(true);
-                    }
-                    return;
-                }
-                if (
-                    e.key === 'ArrowLeft' ||
-                    e.key === 'ArrowRight' ||
-                    e.key === 'ArrowUp' ||
-                    e.key === 'ArrowDown' ||
-                    e.key === 'Home' ||
-                    e.key === 'End'
-                ) {
-                    syncModeFromCaret();
+                if (e.key === 'Enter' && !isCaretInMatchingColorSpan()) {
+                    prepareCaretSpan(isRedMode);
                 }
             });
 
             editorEl.addEventListener('mousedown', () => {
                 if (modTap) modTap.dirty = true;
             });
-            editorEl.addEventListener('mouseup', () => {
-                setTimeout(syncModeFromCaret, 0);
-            });
             editorEl.addEventListener('blur', () => {
                 modTap = null;
+                pendingCaretSpanAfterCompose = false;
                 draftSaver.flush();
             });
         };
