@@ -214,6 +214,704 @@ document.addEventListener('DOMContentLoaded', () => {
         return isAdminAccount() || authState.isTeacher;
     }
 
+    // --- Admin Rich Writing Editor (Black #18181B / Red #DC2626 Toggle for Live Bilingual Writing) ---
+    const ADMIN_BLACK_HEX = '#18181b';
+    const ADMIN_RED_HEX = '#dc2626';
+    const adminRichWriters = [];
+
+    function isRedCssColor(colorStr) {
+        const s = String(colorStr || '').trim().toLowerCase();
+        if (!s) return false;
+        if (s === ADMIN_RED_HEX || s === '#ef4444' || s === 'red') return true;
+        const m = s.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+        if (!m) return false;
+        return Number(m[1]) >= 180 && Number(m[2]) <= 70 && Number(m[3]) <= 70;
+    }
+
+    function extractEditorPlainText(root) {
+        if (!root) return '';
+        let out = '';
+        const walk = (node) => {
+            if (node.nodeType === 3) {
+                out += (node.nodeValue || '').replace(/\u200B/g, '');
+                return;
+            }
+            if (node.nodeType !== 1) return;
+            const tag = node.tagName;
+            const isBlock = tag === 'DIV' || tag === 'P' || tag === 'LI';
+            if (tag === 'BR') {
+                const parent = node.parentNode;
+                const isTrailingBlockBr =
+                    parent &&
+                    parent !== root &&
+                    (parent.tagName === 'DIV' || parent.tagName === 'P' || parent.tagName === 'LI') &&
+                    node === parent.lastChild;
+                if (!isTrailingBlockBr) {
+                    out += '\n';
+                }
+                return;
+            }
+            if (isBlock && node.previousSibling) {
+                out += '\n';
+            }
+            for (let i = 0; i < node.childNodes.length; i++) {
+                walk(node.childNodes[i]);
+            }
+        };
+        for (let i = 0; i < root.childNodes.length; i++) {
+            walk(root.childNodes[i]);
+        }
+        return out;
+    }
+
+    function sanitizeAdminRichHtml(rawHtml) {
+        const temp = document.createElement('div');
+        temp.innerHTML = String(rawHtml || '');
+        const cleanNode = (node) => {
+            if (node.nodeType === 3) {
+                const txt = (node.nodeValue || '').replace(/\u200B/g, '');
+                return txt ? document.createTextNode(txt) : null;
+            }
+            if (node.nodeType !== 1) return null;
+            const tag = node.tagName;
+            if (tag === 'BR') return document.createElement('br');
+            if (tag === 'DIV' || tag === 'P') {
+                const div = document.createElement('div');
+                node.childNodes.forEach(c => {
+                    const cleaned = cleanNode(c);
+                    if (cleaned) div.appendChild(cleaned);
+                });
+                return div;
+            }
+            if (tag === 'SPAN' || tag === 'FONT') {
+                const isRed =
+                    node.classList.contains('admin-seg-red') ||
+                    isRedCssColor(node.style && node.style.color) ||
+                    isRedCssColor(node.getAttribute('color'));
+                const span = document.createElement('span');
+                span.className = isRed ? 'admin-seg-red' : 'admin-seg-black';
+                span.style.color = isRed ? ADMIN_RED_HEX : ADMIN_BLACK_HEX;
+                node.childNodes.forEach(c => {
+                    const cleaned = cleanNode(c);
+                    if (cleaned) span.appendChild(cleaned);
+                });
+                return span.childNodes.length ? span : null;
+            }
+            const frag = document.createDocumentFragment();
+            node.childNodes.forEach(c => {
+                const cleaned = cleanNode(c);
+                if (cleaned) frag.appendChild(cleaned);
+            });
+            return frag;
+        };
+        const out = document.createElement('div');
+        temp.childNodes.forEach(c => {
+            const cleaned = cleanNode(c);
+            if (cleaned) out.appendChild(cleaned);
+        });
+        return out.innerHTML;
+    }
+
+    function createAdminRichWriter({ textarea, getStorageKey, onSync, isEssay = false }) {
+        if (!textarea) {
+            return {
+                syncAccountMode: () => {},
+                setFromTextarea: () => {},
+                clear: () => {},
+                focus: () => {}
+            };
+        }
+
+        let mounted = false;
+        let toolbarEl = null;
+        let toggleBtnEl = null;
+        let toggleLabelEl = null;
+        let editorEl = null;
+        let isRedMode = false;
+        let isComposing = false;
+        let modTap = null;
+
+        const getRichKey = (storageKey) => (storageKey ? `${storageKey}__admin_rich` : '');
+
+        const createColorSpan = (red) => {
+            const span = document.createElement('span');
+            span.className = red ? 'admin-seg-red' : 'admin-seg-black';
+            span.style.color = red ? ADMIN_RED_HEX : ADMIN_BLACK_HEX;
+            return span;
+        };
+
+        const findColorSpan = (node) => {
+            let cur = node;
+            while (cur && cur !== editorEl) {
+                if (
+                    cur.nodeType === 1 &&
+                    cur.tagName === 'SPAN' &&
+                    (cur.classList.contains('admin-seg-red') || cur.classList.contains('admin-seg-black'))
+                ) {
+                    return cur;
+                }
+                cur = cur.parentNode;
+            }
+            return null;
+        };
+
+        const updateToolbarUI = () => {
+            if (!toggleBtnEl || !toggleLabelEl || !editorEl) return;
+            toggleBtnEl.classList.toggle('is-red', isRedMode);
+            toggleBtnEl.setAttribute('aria-pressed', isRedMode ? 'true' : 'false');
+            toggleLabelEl.textContent = isRedMode
+                ? 'Chữ đỏ (Dịch tiếng Việt)'
+                : 'Chữ đen (Tiếng Anh)';
+            editorEl.classList.toggle('is-red-mode', isRedMode);
+        };
+
+        const updateEmptyClass = () => {
+            if (!editorEl) return;
+            const plain = extractEditorPlainText(editorEl);
+            editorEl.classList.toggle('is-empty', plain.length === 0);
+        };
+
+        const saveRichDraft = (plainText) => {
+            if (!editorEl || !isAdminAccount()) return;
+            const storageKey = typeof getStorageKey === 'function' ? getStorageKey() : '';
+            const richKey = getRichKey(storageKey);
+            if (!richKey) return;
+            try {
+                if (!plainText) {
+                    localStorage.removeItem(richKey);
+                } else {
+                    const cleanHtml = sanitizeAdminRichHtml(editorEl.innerHTML);
+                    localStorage.setItem(richKey, JSON.stringify({ text: plainText, html: cleanHtml }));
+                }
+            } catch (e) {}
+        };
+
+        const syncToTextareaAndSave = () => {
+            if (!editorEl) return;
+            const plain = extractEditorPlainText(editorEl);
+            textarea.value = plain;
+            updateEmptyClass();
+            if (typeof onSync === 'function') {
+                onSync();
+            }
+            const storageKey = typeof getStorageKey === 'function' ? getStorageKey() : '';
+            if (storageKey) {
+                draftSaver.schedule(storageKey, plain);
+                saveRichDraft(plain);
+            }
+        };
+
+        const cleanZeroWidthSpaces = () => {
+            if (!editorEl || isComposing) return;
+            const sel = window.getSelection();
+            const anchorNode = sel && sel.rangeCount ? sel.anchorNode : null;
+            const anchorOffset = sel && sel.rangeCount ? sel.anchorOffset : 0;
+
+            const walker = document.createTreeWalker(editorEl, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            let cur;
+            while ((cur = walker.nextNode())) {
+                if ((cur.nodeValue || '').includes('\u200B')) {
+                    nodes.push(cur);
+                }
+            }
+
+            nodes.forEach(txtNode => {
+                const val = txtNode.nodeValue || '';
+                const stripped = val.replace(/\u200B/g, '');
+                if (stripped.length > 0) {
+                    let removedBefore = 0;
+                    if (txtNode === anchorNode) {
+                        for (let i = 0; i < Math.min(anchorOffset, val.length); i++) {
+                            if (val[i] === '\u200B') removedBefore++;
+                        }
+                    }
+                    txtNode.nodeValue = stripped;
+                    if (txtNode === anchorNode && sel) {
+                        const nextOffset = Math.max(0, Math.min(stripped.length, anchorOffset - removedBefore));
+                        const r = document.createRange();
+                        r.setStart(txtNode, nextOffset);
+                        r.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(r);
+                    }
+                } else if (txtNode !== anchorNode) {
+                    const parentSpan = findColorSpan(txtNode);
+                    if (parentSpan && parentSpan.textContent === '\u200B') {
+                        parentSpan.remove();
+                    } else {
+                        txtNode.remove();
+                    }
+                }
+            });
+        };
+
+        const normalizeColorNodes = () => {
+            if (!editorEl) return;
+            editorEl.querySelectorAll('font, span').forEach(el => {
+                if (el.classList.contains('admin-seg-red') || el.classList.contains('admin-seg-black')) {
+                    return;
+                }
+                const col = (el.style && el.style.color) || el.getAttribute('color') || '';
+                if (!col) return;
+                const isRed = isRedCssColor(col);
+                el.removeAttribute('color');
+                el.style.cssText = '';
+                el.className = isRed ? 'admin-seg-red' : 'admin-seg-black';
+                el.style.color = isRed ? ADMIN_RED_HEX : ADMIN_BLACK_HEX;
+            });
+        };
+
+        const placeCaretAtEndOfNode = (node) => {
+            const sel = window.getSelection();
+            if (!sel) return;
+            const r = document.createRange();
+            if (node.nodeType === 3) {
+                r.setStart(node, node.nodeValue.length);
+            } else {
+                r.selectNodeContents(node);
+                r.collapse(false);
+            }
+            r.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(r);
+        };
+
+        const prepareCaretSpan = (targetRed) => {
+            if (!editorEl) return;
+            if (document.activeElement !== editorEl) {
+                editorEl.focus();
+            }
+            const sel = window.getSelection();
+            if (!sel) return;
+            let range = sel.rangeCount ? sel.getRangeAt(0) : null;
+            if (!range || !editorEl.contains(range.startContainer)) {
+                range = document.createRange();
+                range.selectNodeContents(editorEl);
+                range.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+
+            const existingSpan = findColorSpan(range.startContainer);
+            if (existingSpan) {
+                const onlyZwsp = existingSpan.textContent === '\u200B';
+                if (onlyZwsp) {
+                    existingSpan.className = targetRed ? 'admin-seg-red' : 'admin-seg-black';
+                    existingSpan.style.color = targetRed ? ADMIN_RED_HEX : ADMIN_BLACK_HEX;
+                    const tNode = existingSpan.firstChild;
+                    if (tNode && tNode.nodeType === 3) {
+                        placeCaretAtEndOfNode(tNode);
+                    }
+                    return;
+                }
+                const currentlyRed = existingSpan.classList.contains('admin-seg-red');
+                if (currentlyRed === targetRed) {
+                    return;
+                }
+
+                // Split existingSpan at caret into [beforeSpan] [newZwspSpan] [optional afterSpan]
+                const afterRange = document.createRange();
+                afterRange.setStart(range.startContainer, range.startOffset);
+                afterRange.setEnd(existingSpan, existingSpan.childNodes.length);
+                const afterFrag = afterRange.extractContents();
+
+                const newSpan = createColorSpan(targetRed);
+                const zwsp = document.createTextNode('\u200B');
+                newSpan.appendChild(zwsp);
+
+                existingSpan.parentNode.insertBefore(newSpan, existingSpan.nextSibling);
+
+                const hasAfterContent =
+                    (afterFrag.textContent || '').replace(/\u200B/g, '').length > 0 ||
+                    Boolean(afterFrag.querySelector('br'));
+                if (hasAfterContent) {
+                    const tailSpan = createColorSpan(currentlyRed);
+                    tailSpan.appendChild(afterFrag);
+                    newSpan.parentNode.insertBefore(tailSpan, newSpan.nextSibling);
+                }
+
+                const hasBeforeContent =
+                    (existingSpan.textContent || '').replace(/\u200B/g, '').length > 0 ||
+                    Boolean(existingSpan.querySelector('br'));
+                if (!hasBeforeContent) {
+                    existingSpan.remove();
+                }
+
+                placeCaretAtEndOfNode(zwsp);
+                return;
+            }
+
+            const newSpan = createColorSpan(targetRed);
+            const zwsp = document.createTextNode('\u200B');
+            newSpan.appendChild(zwsp);
+            range.insertNode(newSpan);
+            placeCaretAtEndOfNode(zwsp);
+        };
+
+        const syncModeFromCaret = () => {
+            if (!editorEl || document.activeElement !== editorEl) return;
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount) return;
+            const node = sel.anchorNode;
+            if (!node || !editorEl.contains(node)) return;
+            const span = findColorSpan(node);
+            if (!span) {
+                if (isRedMode) {
+                    isRedMode = false;
+                    updateToolbarUI();
+                }
+                return;
+            }
+            const nextRed = span.classList.contains('admin-seg-red');
+            if (nextRed !== isRedMode) {
+                isRedMode = nextRed;
+                updateToolbarUI();
+            }
+        };
+
+        const toggleColorMode = () => {
+            if (!editorEl || !isAdminAccount()) return;
+            if (document.activeElement !== editorEl) {
+                editorEl.focus();
+            }
+            const nextRed = !isRedMode;
+            const sel = window.getSelection();
+            const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+
+            if (range && !range.collapsed && editorEl.contains(range.commonAncestorContainer)) {
+                try {
+                    document.execCommand('styleWithCSS', false, true);
+                    document.execCommand('foreColor', false, nextRed ? ADMIN_RED_HEX : ADMIN_BLACK_HEX);
+                    normalizeColorNodes();
+                } catch (e) {}
+                isRedMode = nextRed;
+                updateToolbarUI();
+                syncToTextareaAndSave();
+                return;
+            }
+
+            isRedMode = nextRed;
+            updateToolbarUI();
+            prepareCaretSpan(nextRed);
+        };
+
+        const renderPlainTextToEditor = (plain) => {
+            if (!editorEl) return;
+            editorEl.innerHTML = '';
+            if (!plain) {
+                updateEmptyClass();
+                return;
+            }
+            const lines = String(plain).split('\n');
+            lines.forEach((line, idx) => {
+                if (idx === 0) {
+                    if (line.length > 0) {
+                        const span = createColorSpan(false);
+                        span.textContent = line;
+                        editorEl.appendChild(span);
+                    }
+                } else {
+                    const div = document.createElement('div');
+                    if (line.length > 0) {
+                        const span = createColorSpan(false);
+                        span.textContent = line;
+                        div.appendChild(span);
+                    } else {
+                        div.appendChild(document.createElement('br'));
+                    }
+                    editorEl.appendChild(div);
+                }
+            });
+            updateEmptyClass();
+        };
+
+        const ensureMounted = () => {
+            if (mounted) return;
+            mounted = true;
+
+            toolbarEl = document.createElement('div');
+            toolbarEl.className = 'admin-rich-toolbar';
+
+            toggleBtnEl = document.createElement('button');
+            toggleBtnEl.type = 'button';
+            toggleBtnEl.className = 'admin-color-toggle-btn';
+            toggleBtnEl.title = 'Chuyển màu chữ giữa Đen (Tiếng Anh) và Đỏ (Dịch tiếng Việt)';
+
+            const dot = document.createElement('span');
+            dot.className = 'admin-color-dot';
+            toggleLabelEl = document.createElement('span');
+            toggleLabelEl.textContent = 'Chữ đen (Tiếng Anh)';
+            toggleBtnEl.appendChild(dot);
+            toggleBtnEl.appendChild(toggleLabelEl);
+
+            const hintEl = document.createElement('span');
+            hintEl.className = 'admin-rich-hint';
+            hintEl.textContent = 'Nhấn ⌥ Option hoặc ⌃ Control để đổi màu';
+
+            toolbarEl.appendChild(toggleBtnEl);
+            toolbarEl.appendChild(hintEl);
+
+            editorEl = document.createElement('div');
+            editorEl.className = isEssay
+                ? 'draft-writing-textarea ej-textarea admin-rich-editor'
+                : 'draft-writing-textarea admin-rich-editor';
+            editorEl.contentEditable = 'true';
+            editorEl.spellcheck = false;
+            editorEl.setAttribute('role', 'textbox');
+            editorEl.setAttribute('aria-multiline', 'true');
+            editorEl.setAttribute('data-placeholder', textarea.placeholder || '');
+
+            textarea.parentNode.insertBefore(toolbarEl, textarea);
+            textarea.parentNode.insertBefore(editorEl, textarea.nextSibling);
+            textarea.style.display = 'none';
+            toolbarEl.style.display = 'flex';
+            editorEl.style.display = 'block';
+
+            toggleBtnEl.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+            });
+            toggleBtnEl.addEventListener('click', () => {
+                toggleColorMode();
+            });
+
+            editorEl.addEventListener('compositionstart', () => {
+                isComposing = true;
+            });
+
+            editorEl.addEventListener('compositionend', () => {
+                isComposing = false;
+                cleanZeroWidthSpaces();
+                syncToTextareaAndSave();
+            });
+
+            editorEl.addEventListener('input', () => {
+                if (!isComposing) {
+                    cleanZeroWidthSpaces();
+                    const plain = extractEditorPlainText(editorEl);
+                    if (plain.length === 0 && !editorEl.querySelector('span')) {
+                        editorEl.innerHTML = '';
+                    }
+                    syncToTextareaAndSave();
+                } else {
+                    const plain = extractEditorPlainText(editorEl);
+                    textarea.value = plain;
+                    updateEmptyClass();
+                    if (typeof onSync === 'function') onSync();
+                }
+            });
+
+            editorEl.addEventListener('paste', (e) => {
+                e.preventDefault();
+                const text = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
+                if (!text) return;
+                const sel = window.getSelection();
+                if (!sel || !sel.rangeCount) return;
+                const range = sel.getRangeAt(0);
+                range.deleteContents();
+
+                const frag = document.createDocumentFragment();
+                const lines = text.replace(/\r\n?/g, '\n').split('\n');
+                let lastInserted = null;
+                lines.forEach((line, idx) => {
+                    if (idx > 0) {
+                        const br = document.createElement('br');
+                        frag.appendChild(br);
+                        lastInserted = br;
+                    }
+                    if (line.length > 0) {
+                        const span = createColorSpan(isRedMode);
+                        span.textContent = line;
+                        frag.appendChild(span);
+                        lastInserted = span.firstChild;
+                    }
+                });
+                range.insertNode(frag);
+                if (lastInserted) {
+                    placeCaretAtEndOfNode(lastInserted);
+                }
+                cleanZeroWidthSpaces();
+                syncToTextareaAndSave();
+            });
+
+            editorEl.addEventListener('keydown', (e) => {
+                if (!isAdminAccount()) return;
+                if (e.key === 'Fn' || e.key === 'F13') {
+                    if (!e.repeat) {
+                        e.preventDefault();
+                        toggleColorMode();
+                    }
+                    return;
+                }
+                if ((e.key === 'Alt' || e.key === 'Control') && !e.metaKey && !e.shiftKey) {
+                    const otherModHeld =
+                        (e.key === 'Alt' && e.ctrlKey) || (e.key === 'Control' && e.altKey);
+                    if (!otherModHeld && !e.repeat) {
+                        modTap = { key: e.key, downAt: Date.now(), dirty: false };
+                    } else if (otherModHeld && modTap) {
+                        modTap.dirty = true;
+                    }
+                    return;
+                }
+                if (modTap) {
+                    modTap.dirty = true;
+                }
+
+                // Skip empty ZWSP-only placeholder span on Backspace so 1st Backspace deletes real text
+                if (e.key === 'Backspace' && !isComposing && !e.isComposing) {
+                    const sel = window.getSelection();
+                    if (sel && sel.rangeCount && sel.isCollapsed) {
+                        const r = sel.getRangeAt(0);
+                        const span = findColorSpan(r.startContainer);
+                        if (span && span.textContent === '\u200B') {
+                            const prev = span.previousSibling;
+                            const parent = span.parentNode;
+                            const idx = parent ? Array.prototype.indexOf.call(parent.childNodes, span) : 0;
+                            span.remove();
+                            if (prev) {
+                                placeCaretAtEndOfNode(prev);
+                            } else if (parent) {
+                                const nextR = document.createRange();
+                                nextR.setStart(parent, Math.max(0, idx));
+                                nextR.collapse(true);
+                                sel.removeAllRanges();
+                                sel.addRange(nextR);
+                            }
+                        }
+                    }
+                }
+            });
+
+            editorEl.addEventListener('keyup', (e) => {
+                if (!isAdminAccount()) return;
+                if (modTap && e.key === modTap.key) {
+                    const tap = modTap;
+                    modTap = null;
+                    if (!tap.dirty && !isComposing && Date.now() - tap.downAt <= 500) {
+                        e.preventDefault();
+                        toggleColorMode();
+                    }
+                    return;
+                }
+                if (e.key === 'Enter' && isRedMode) {
+                    const sel = window.getSelection();
+                    const node = sel && sel.rangeCount ? sel.anchorNode : null;
+                    if (node && editorEl.contains(node) && !findColorSpan(node)) {
+                        prepareCaretSpan(true);
+                    }
+                    return;
+                }
+                if (
+                    e.key === 'ArrowLeft' ||
+                    e.key === 'ArrowRight' ||
+                    e.key === 'ArrowUp' ||
+                    e.key === 'ArrowDown' ||
+                    e.key === 'Home' ||
+                    e.key === 'End'
+                ) {
+                    syncModeFromCaret();
+                }
+            });
+
+            editorEl.addEventListener('mousedown', () => {
+                if (modTap) modTap.dirty = true;
+            });
+            editorEl.addEventListener('mouseup', () => {
+                setTimeout(syncModeFromCaret, 0);
+            });
+            editorEl.addEventListener('blur', () => {
+                modTap = null;
+                draftSaver.flush();
+            });
+        };
+
+        const setFromTextarea = (storageKey) => {
+            if (!isAdminAccount()) return;
+            ensureMounted();
+            editorEl.setAttribute('data-placeholder', textarea.placeholder || '');
+            const plain = textarea.value || '';
+            let restored = false;
+            const richKey = getRichKey(storageKey);
+            if (richKey && plain.length > 0) {
+                try {
+                    const raw = localStorage.getItem(richKey);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && parsed.text === plain && typeof parsed.html === 'string') {
+                            editorEl.innerHTML = sanitizeAdminRichHtml(parsed.html);
+                            restored = true;
+                        }
+                    }
+                } catch (e) {}
+            }
+            if (!restored) {
+                renderPlainTextToEditor(plain);
+            }
+            isRedMode = false;
+            updateEmptyClass();
+            updateToolbarUI();
+        };
+
+        const syncAccountMode = () => {
+            if (isAdminAccount()) {
+                const alreadyActive =
+                    mounted &&
+                    editorEl &&
+                    editorEl.style.display === 'block' &&
+                    textarea.style.display === 'none';
+                ensureMounted();
+                textarea.style.display = 'none';
+                toolbarEl.style.display = 'flex';
+                editorEl.style.display = 'block';
+                if (!alreadyActive) {
+                    const storageKey = typeof getStorageKey === 'function' ? getStorageKey() : '';
+                    setFromTextarea(storageKey);
+                }
+            } else if (mounted) {
+                toolbarEl.style.display = 'none';
+                editorEl.style.display = 'none';
+                editorEl.innerHTML = '';
+                textarea.style.display = '';
+                isRedMode = false;
+            }
+        };
+
+        const clear = (storageKey) => {
+            textarea.value = '';
+            const richKey = getRichKey(storageKey);
+            if (richKey) {
+                try {
+                    localStorage.removeItem(richKey);
+                } catch (e) {}
+            }
+            if (mounted) {
+                editorEl.innerHTML = '';
+                isRedMode = false;
+                updateEmptyClass();
+                updateToolbarUI();
+            }
+        };
+
+        const focus = () => {
+            if (isAdminAccount() && mounted && editorEl) {
+                editorEl.focus();
+            } else {
+                textarea.focus();
+            }
+        };
+
+        const writer = { syncAccountMode, setFromTextarea, clear, focus };
+        adminRichWriters.push(writer);
+        if (isAdminAccount()) {
+            syncAccountMode();
+        }
+        return writer;
+    }
+
+    function syncAllAdminRichEditors() {
+        adminRichWriters.forEach(w => w.syncAccountMode());
+    }
+
     function getCloudSubmission(lessonId) {
         return (authState.submissionsByLessonId && authState.submissionsByLessonId[lessonId]) || null;
     }
@@ -294,7 +992,7 @@ document.addEventListener('DOMContentLoaded', () => {
             blocks.push(`
                 <div class="writing-teacher-feedback-box">
                     <div class="writing-tf-head">
-                        <span class="writing-tf-title">👨‍🏫 Nhận xét từ Giáo viên${submittedTime ? ` · Đã nộp ${esc(submittedTime)}` : ''}</span>
+                        <span class="writing-tf-title">👨‍🏫 Nhận xét từ Giáo viên${submittedTime ? ` - Đã nộp ${esc(submittedTime)}` : ''}</span>
                         ${sub.teacher_score ? `<span class="writing-tf-score">Điểm: ${esc(sub.teacher_score)}</span>` : ''}
                     </div>
                     ${sub.teacher_feedback ? `<p class="writing-tf-comment">${esc(sub.teacher_feedback)}</p>` : ''}
@@ -307,8 +1005,8 @@ document.addEventListener('DOMContentLoaded', () => {
             blocks.push(`
                 <div class="writing-teacher-feedback-box">
                     <div class="writing-tf-head">
-                        <span class="writing-tf-title">✅ Bài sửa chi tiết đã sẵn sàng${relTime ? ` · Trả lúc ${esc(relTime)}` : ''}</span>
-                        <span class="writing-tf-score">${esc(String(sub.word_count || 0))} từ · Level ${esc(releasedReview.target_level || sub.target_level || 'B1')}</span>
+                        <span class="writing-tf-title">✅ Bài sửa chi tiết đã sẵn sàng${relTime ? ` - Trả lúc ${esc(relTime)}` : ''}</span>
+                        <span class="writing-tf-score">${esc(String(sub.word_count || 0))} từ - Level ${esc(releasedReview.target_level || sub.target_level || 'B1')}</span>
                     </div>
                 </div>
                 ${CLOUD.renderWritingReviewHtml(sub.content || '', releasedReview.review_json, {
@@ -327,7 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 blocks.push(`
                     <div class="writing-schedule-box">
                         <div class="writing-schedule-head">
-                            <span class="writing-schedule-title">⏳ Đã nộp bài thành công${submittedTime ? ` lúc ${esc(submittedTime)}` : ''} · Đang chờ trả bài sửa</span>
+                            <span class="writing-schedule-title">⏳ Đã nộp bài thành công${submittedTime ? ` lúc ${esc(submittedTime)}` : ''} - Đang chờ trả bài sửa</span>
                             <span class="writing-schedule-pill">Còn ${esc(remainText)}</span>
                         </div>
                         <p class="writing-schedule-desc">
@@ -340,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="writing-teacher-feedback-box">
                         <div class="writing-tf-head">
                             <span class="writing-tf-title">✓ Đã gửi bài viết thành công${submittedTime ? ` lúc ${esc(submittedTime)}` : ''}</span>
-                            <span class="writing-tf-score">${esc(String(sub.word_count || 0))} từ · Level ${esc(sub.target_level || 'B1')}</span>
+                            <span class="writing-tf-score">${esc(String(sub.word_count || 0))} từ - Level ${esc(sub.target_level || 'B1')}</span>
                         </div>
                         <p class="writing-tf-comment">Bài sửa chi tiết của bạn đang được hoàn tất. Thông báo sẽ tự động hiện ở biểu tượng chuông 🔔 trên góc phải ngay khi bài sửa sẵn sàng.</p>
                     </div>
@@ -563,13 +1261,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (dashboardCrumbEl) {
             if (viewId === 'task1-hub') {
-                dashboardCrumbEl.textContent = 'Task 01 · 8 bài học';
+                dashboardCrumbEl.textContent = 'Task 01 - 8 bài học';
             } else if (viewId === 'task2-hub') {
-                dashboardCrumbEl.textContent = 'Task 02 · 13 mục';
+                dashboardCrumbEl.textContent = 'Task 02 - 13 mục';
             } else if (viewId === 'my-submissions') {
                 dashboardCrumbEl.textContent = 'Bài viết đã nộp';
             } else {
-                dashboardCrumbEl.textContent = 'Tổng quan · 2 Task';
+                dashboardCrumbEl.textContent = 'Tổng quan - 2 Task';
             }
         }
 
@@ -580,13 +1278,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (brandTagEl && brandTitleEl) {
             if (meta.mode === 'task1') {
-                brandTagEl.textContent = 'VSTEP WRITING · TASK 01';
+                brandTagEl.textContent = 'VSTEP WRITING - TASK 01';
                 brandTitleEl.textContent = 'Viết Thư & Email';
             } else if (meta.mode === 'task2') {
-                brandTagEl.textContent = 'VSTEP WRITING · TASK 02';
+                brandTagEl.textContent = 'VSTEP WRITING - TASK 02';
                 brandTitleEl.textContent = 'Viết Luận (Essay)';
             } else {
-                brandTagEl.textContent = 'VSTEP WRITING · B1 – B2';
+                brandTagEl.textContent = 'VSTEP WRITING - B1 – B2';
                 brandTitleEl.textContent = 'Viết Thư & Viết Luận';
             }
         }
@@ -664,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Quick Search (⌘K) across Task 01 & Task 02 lessons ---
     const QUICK_SEARCH_CATALOG = [
-        { title: 'Lý thuyết chung: Viết Thư & Email', sub: 'Task 01 · Bố cục 3 phần, văn phong Formal/Informal', tag: 'Task 01', view: 'ly-thuyet' },
+        { title: 'Lý thuyết chung: Viết Thư & Email', sub: 'Task 01 - Bố cục 3 phần, văn phong Formal/Informal', tag: 'Task 01', view: 'ly-thuyet' },
         { title: 'Thư khuyên / đề xuất (5 đề)', sub: 'Mua hàng online (Jay), Hội thảo (Carol), Du lịch Hà Nội, Chuyển nhà, Mùa hè', tag: 'Task 01', view: 'khuyen-nghi' },
         { title: 'Thư hỏi thông tin (4 đề)', sub: 'Vé xem hòa nhạc (Alex), mua thú cưng (Pet Shop), tiệc sinh nhật (Sarah), khóa tiếng Anh mùa hè (London)', tag: 'Task 01', view: 'hoi-thong-tin' },
         { title: 'Thư cung cấp thông tin (6 đề)', sub: 'Quê hương (John), Hoa (Emily), tiệc chào mừng, chuyến đi, thể thao, tuyển dụng', tag: 'Task 01', view: 'cung-cap-thong-tin' },
@@ -673,18 +1371,18 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: 'Thư xin lỗi (4 đề)', sub: 'Nộp bài trễ, lỡ hẹn phỏng vấn, dịch vụ khách sạn, trả sách Anna', tag: 'Task 01', view: 'xin-loi' },
         { title: 'Thư xin việc (3 đề)', sub: 'Trợ lý bán hàng, tình nguyện viên thư viện, kỹ thuật viên phần mềm', tag: 'Task 01', view: 'xin-viec' },
         { title: 'Lý thuyết chung: Viết Luận (Task 2)', sub: 'Tổng quan 4 dạng bài luận VSTEP', tag: 'Task 02', view: 'task2-ly-thuyet' },
-        { title: 'Chủ đề 1: Trẻ em & Thiết bị điện tử', sub: 'Children & Electronic Devices · Causes & Solutions', tag: 'Task 02', essay: 'children-devices' },
-        { title: 'Chủ đề 2: Thời trang nhanh & Môi trường', sub: 'Fast Fashion & the Environment · Causes & Solutions', tag: 'Task 02', essay: 'fast-fashion' },
-        { title: 'Chủ đề 3: Lựa chọn công việc & Sự hài lòng', sub: 'Choosing a Job & Job Satisfaction · Opinion', tag: 'Task 02', essay: 'choosing-job' },
-        { title: 'Chủ đề 4: Tự kinh doanh / Tự làm chủ', sub: 'Self-Employment · Advantages & Disadvantages', tag: 'Task 02', essay: 'self-employment' },
-        { title: 'Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc', sub: 'Removing Traffic Lights · Opinion', tag: 'Task 02', essay: 'traffic-lights' },
-        { title: 'Chủ đề 6: Sự gia tăng lượng khách du lịch', sub: 'Growth in Tourist Numbers · Advantages & Disadvantages', tag: 'Task 02', essay: 'tourism-growth' },
-        { title: 'Chủ đề 7: Người trẻ bỏ phố về quê', sub: 'Leaving Cities for Rural Hometowns · Advantages & Disadvantages', tag: 'Task 02', essay: 'leaving-cities' },
-        { title: 'Chủ đề 8: Người trẻ thường xuyên nhảy việc', sub: 'Changing Jobs Frequently · Causes & Effects', tag: 'Task 02', essay: 'job-hopping' },
-        { title: 'Chủ đề 9: Xung đột giữa cha mẹ và con tuổi teen', sub: 'Parent–Teenager Conflicts · Causes & Solutions', tag: 'Task 02', essay: 'parent-teen-conflicts' },
-        { title: 'Chủ đề 10: Nguyên nhân gây căng thẳng ở người trẻ', sub: 'Stress Among Young People · Causes Essay', tag: 'Task 02', essay: 'youth-stress' },
-        { title: 'Chủ đề 11: Người cao tuổi với Điện thoại & Internet', sub: 'Mobile Phones, the Internet & the Elderly · Two-Part Question', tag: 'Task 02', essay: 'elderly-technology' },
-        { title: 'Chủ đề 12: Tác động của tòa nhà văn phòng kính', sub: 'Modern Glass Office Buildings · Effects Essay', tag: 'Task 02', essay: 'glass-office-buildings' }
+        { title: 'Chủ đề 1: Trẻ em & Thiết bị điện tử', sub: 'Children & Electronic Devices - Causes & Solutions', tag: 'Task 02', essay: 'children-devices' },
+        { title: 'Chủ đề 2: Thời trang nhanh & Môi trường', sub: 'Fast Fashion & the Environment - Causes & Solutions', tag: 'Task 02', essay: 'fast-fashion' },
+        { title: 'Chủ đề 3: Lựa chọn công việc & Sự hài lòng', sub: 'Choosing a Job & Job Satisfaction - Opinion', tag: 'Task 02', essay: 'choosing-job' },
+        { title: 'Chủ đề 4: Tự kinh doanh / Tự làm chủ', sub: 'Self-Employment - Advantages & Disadvantages', tag: 'Task 02', essay: 'self-employment' },
+        { title: 'Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc', sub: 'Removing Traffic Lights - Opinion', tag: 'Task 02', essay: 'traffic-lights' },
+        { title: 'Chủ đề 6: Sự gia tăng lượng khách du lịch', sub: 'Growth in Tourist Numbers - Advantages & Disadvantages', tag: 'Task 02', essay: 'tourism-growth' },
+        { title: 'Chủ đề 7: Người trẻ bỏ phố về quê', sub: 'Leaving Cities for Rural Hometowns - Advantages & Disadvantages', tag: 'Task 02', essay: 'leaving-cities' },
+        { title: 'Chủ đề 8: Người trẻ thường xuyên nhảy việc', sub: 'Changing Jobs Frequently - Causes & Effects', tag: 'Task 02', essay: 'job-hopping' },
+        { title: 'Chủ đề 9: Xung đột giữa cha mẹ và con tuổi teen', sub: 'Parent–Teenager Conflicts - Causes & Solutions', tag: 'Task 02', essay: 'parent-teen-conflicts' },
+        { title: 'Chủ đề 10: Nguyên nhân gây căng thẳng ở người trẻ', sub: 'Stress Among Young People - Causes Essay', tag: 'Task 02', essay: 'youth-stress' },
+        { title: 'Chủ đề 11: Người cao tuổi với Điện thoại & Internet', sub: 'Mobile Phones, the Internet & the Elderly - Two-Part Question', tag: 'Task 02', essay: 'elderly-technology' },
+        { title: 'Chủ đề 12: Tác động của tòa nhà văn phòng kính', sub: 'Modern Glass Office Buildings - Effects Essay', tag: 'Task 02', essay: 'glass-office-buildings' }
     ];
 
     function normalizeSearchText(str) {
@@ -1799,7 +2497,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateAdviceHeaderTag() {
         const pData = ADVICE_PROMPTS_DATA[currentAdvicePromptId];
         if (adviceCurrentLevelTag && pData) {
-            adviceCurrentLevelTag.textContent = ` · ${pData.numLabel} · Level ${currentAdviceLevel}`;
+            adviceCurrentLevelTag.textContent = ` - ${pData.numLabel} - Level ${currentAdviceLevel}`;
         }
     }
 
@@ -1851,6 +2549,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 16.6 Live Word Counter, Prompt Switcher (5 Đề), LocalStorage Draft & Submit / Sample Comparison
     const adviceTextarea = document.getElementById('advice-writing-textarea');
+    const adviceRichWriter = createAdminRichWriter({
+        textarea: adviceTextarea,
+        getStorageKey: () => getAdviceStorageKey(currentAdvicePromptId),
+        onSync: () => updateAdviceWordState()
+    });
     const adviceWcEl = document.getElementById('advice-writing-wc');
     const adviceStatusEl = document.getElementById('advice-writing-status');
     const adviceSubmitBtn = document.getElementById('advice-submit-btn');
@@ -1935,7 +2638,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (adviceFeedbackTitle) {
             adviceFeedbackTitle.textContent = isCurrentAdviceSubmitted
                 ? `✓ Đã nộp bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`
-                : '👁️ Chế độ Admin · Xem trước bài mẫu chuẩn:';
+                : '👁️ Chế độ Admin - Xem trước bài mẫu chuẩn:';
         }
         if (adviceFeedbackBox) {
             adviceFeedbackBox.style.display = revealSample ? 'block' : 'none';
@@ -1969,20 +2672,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (adviceStatusEl) {
             if (cloudSub && cloudSub.is_submitted) {
                 adviceStatusEl.textContent = canSubmit
-                    ? `✓ Đã nộp cho Giáo viên (${wc} từ) · Đã mở khóa bài mẫu`
-                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp bản sửa mới`;
+                    ? `✓ Đã nộp cho Giáo viên (${wc} từ) - Đã mở khóa bài mẫu`
+                    : `${wc}/${minW} từ - cần thêm ${needed} từ để nộp bản sửa mới`;
             } else if (isCurrentAdviceSubmitted) {
                 adviceStatusEl.textContent = canSubmit
-                    ? `✓ Đã nộp (${wc} từ) · Đã mở khóa bài mẫu`
-                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp lại`;
+                    ? `✓ Đã nộp (${wc} từ) - Đã mở khóa bài mẫu`
+                    : `${wc}/${minW} từ - cần thêm ${needed} từ để nộp lại`;
             } else if (canPreviewSampleWithoutSubmit()) {
                 adviceStatusEl.textContent = canSubmit
-                    ? `${wc}/${minW} từ · Đủ điều kiện nộp bài · Admin có thể xem trước bài mẫu`
-                    : `${wc}/${minW} từ · Admin có thể xem trước bài mẫu không cần nộp bài`;
+                    ? `${wc}/${minW} từ - Đủ điều kiện nộp bài`
+                    : `${wc}/${minW} từ`;
             } else {
                 adviceStatusEl.textContent = canSubmit
-                    ? `${wc}/${minW} từ · Đủ điều kiện — bấm Nộp bài để gửi Giáo viên & xem bài mẫu`
-                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp & xem bài mẫu`;
+                    ? `${wc}/${minW} từ - Đủ điều kiện — bấm Nộp bài để gửi Giáo viên & xem bài mẫu`
+                    : `${wc}/${minW} từ - cần thêm ${needed} từ để nộp & xem bài mẫu`;
             }
             adviceStatusEl.classList.toggle('ready', canSubmit || isCurrentAdviceSubmitted || Boolean(cloudSub && cloudSub.is_submitted));
         }
@@ -2050,6 +2753,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 saved = cloudSub.content;
             }
             adviceTextarea.value = saved;
+            adviceRichWriter.setFromTextarea(getAdviceStorageKey(currentAdvicePromptId));
         }
 
         isCurrentAdviceSubmitted = Boolean(cloudSub && cloudSub.is_submitted) || checkStoredAdviceSubmitted(currentAdvicePromptId, saved);
@@ -2123,7 +2827,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const lessonTitle = getCatalogLessonTitle(
                 lessonId,
-                pData ? `Task 01 · ${pData.numLabel}: ${pData.taskTitle}` : lessonId
+                pData ? `Task 01 - ${pData.numLabel}: ${pData.taskTitle}` : lessonId
             );
             const promptText = pData
                 ? `${pData.promptEn}\n${(pData.bullets || []).map(b => `- ${b.en}`).join('\n')}`
@@ -2194,10 +2898,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
             }
-            adviceTextarea.value = '';
+            const adviceKey = getAdviceStorageKey(currentAdvicePromptId);
+            adviceRichWriter.clear(adviceKey);
             const cloudSub = getCloudSubmission(getAdviceLessonId(currentAdvicePromptId));
             isCurrentAdviceSubmitted = Boolean(cloudSub && cloudSub.is_submitted);
-            const adviceKey = getAdviceStorageKey(currentAdvicePromptId);
             draftSaver.cancel(adviceKey);
             try {
                 localStorage.removeItem(adviceKey);
@@ -2205,7 +2909,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (e) {}
             syncAdviceSampleUI(false);
             updateAdviceWordState();
-            adviceTextarea.focus();
+            adviceRichWriter.focus();
         });
     }
 
@@ -2244,6 +2948,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const inquiryTimerBtn = document.getElementById('inquiry-timer-btn');
     const inquiryTimerDisplay = document.getElementById('inquiry-timer-display');
     const inquiryTextarea = document.getElementById('inquiry-writing-textarea');
+    const inquiryRichWriter = createAdminRichWriter({
+        textarea: inquiryTextarea,
+        getStorageKey: () => getInquiryStorageKey(currentInquiryPromptId),
+        onSync: () => updateInquiryWordState()
+    });
     const inquiryWcEl = document.getElementById('inquiry-writing-wc');
     const inquiryStatusEl = document.getElementById('inquiry-writing-status');
     const inquirySubmitBtn = document.getElementById('inquiry-submit-btn');
@@ -2761,7 +3470,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateInquiryHeaderTag() {
         const pData = INQUIRY_PROMPTS_DATA[currentInquiryPromptId];
         if (inquiryCurrentLevelTag && pData) {
-            inquiryCurrentLevelTag.textContent = ` · ${pData.numLabel} · Level ${currentInquiryLevel}`;
+            inquiryCurrentLevelTag.textContent = ` - ${pData.numLabel} - Level ${currentInquiryLevel}`;
         }
     }
 
@@ -2861,7 +3570,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (inquiryFeedbackTitle) {
             inquiryFeedbackTitle.textContent = isCurrentInquirySubmitted
                 ? `✓ Đã nộp bài viết (${wc} từ)! Đối chiếu với bài mẫu chuẩn:`
-                : '👁️ Chế độ Admin · Xem trước bài mẫu chuẩn:';
+                : '👁️ Chế độ Admin - Xem trước bài mẫu chuẩn:';
         }
         if (inquiryFeedbackBox) {
             inquiryFeedbackBox.style.display = revealSample ? 'block' : 'none';
@@ -2895,20 +3604,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (inquiryStatusEl) {
             if (cloudSub && cloudSub.is_submitted) {
                 inquiryStatusEl.textContent = canSubmit
-                    ? `✓ Đã nộp cho Giáo viên (${wc} từ) · Đã mở khóa bài mẫu`
-                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp bản sửa mới`;
+                    ? `✓ Đã nộp cho Giáo viên (${wc} từ) - Đã mở khóa bài mẫu`
+                    : `${wc}/${minW} từ - cần thêm ${needed} từ để nộp bản sửa mới`;
             } else if (isCurrentInquirySubmitted) {
                 inquiryStatusEl.textContent = canSubmit
-                    ? `✓ Đã nộp (${wc} từ) · Đã mở khóa bài mẫu`
-                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp lại`;
+                    ? `✓ Đã nộp (${wc} từ) - Đã mở khóa bài mẫu`
+                    : `${wc}/${minW} từ - cần thêm ${needed} từ để nộp lại`;
             } else if (canPreviewSampleWithoutSubmit()) {
                 inquiryStatusEl.textContent = canSubmit
-                    ? `${wc}/${minW} từ · Đủ điều kiện nộp bài · Admin có thể xem trước bài mẫu`
-                    : `${wc}/${minW} từ · Admin có thể xem trước bài mẫu không cần nộp bài`;
+                    ? `${wc}/${minW} từ - Đủ điều kiện nộp bài`
+                    : `${wc}/${minW} từ`;
             } else {
                 inquiryStatusEl.textContent = canSubmit
-                    ? `${wc}/${minW} từ · Đủ điều kiện — bấm Nộp bài để gửi Giáo viên & xem bài mẫu`
-                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp & xem bài mẫu`;
+                    ? `${wc}/${minW} từ - Đủ điều kiện — bấm Nộp bài để gửi Giáo viên & xem bài mẫu`
+                    : `${wc}/${minW} từ - cần thêm ${needed} từ để nộp & xem bài mẫu`;
             }
             inquiryStatusEl.classList.toggle('ready', canSubmit || isCurrentInquirySubmitted || Boolean(cloudSub && cloudSub.is_submitted));
         }
@@ -2972,6 +3681,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 saved = cloudSub.content;
             }
             inquiryTextarea.value = saved;
+            inquiryRichWriter.setFromTextarea(getInquiryStorageKey(currentInquiryPromptId));
         }
 
         isCurrentInquirySubmitted = Boolean(cloudSub && cloudSub.is_submitted) || checkStoredInquirySubmitted(currentInquiryPromptId, saved);
@@ -3045,7 +3755,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const lessonTitle = getCatalogLessonTitle(
                 lessonId,
-                pData ? `Task 01 · Hỏi thông tin ${submittedPromptId}: ${pData.taskTitle}` : lessonId
+                pData ? `Task 01 - Hỏi thông tin ${submittedPromptId}: ${pData.taskTitle}` : lessonId
             );
             const promptText = pData
                 ? `${pData.promptEn}\n${(pData.bullets || []).map(b => `- ${b.en}`).join('\n')}`
@@ -3116,10 +3826,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
             }
-            inquiryTextarea.value = '';
+            const inquiryKey = getInquiryStorageKey(currentInquiryPromptId);
+            inquiryRichWriter.clear(inquiryKey);
             const cloudSub = getCloudSubmission(getInquiryLessonId(currentInquiryPromptId));
             isCurrentInquirySubmitted = Boolean(cloudSub && cloudSub.is_submitted);
-            const inquiryKey = getInquiryStorageKey(currentInquiryPromptId);
             draftSaver.cancel(inquiryKey);
             try {
                 localStorage.removeItem(inquiryKey);
@@ -3127,7 +3837,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (e) {}
             syncInquirySampleUI(false);
             updateInquiryWordState();
-            inquiryTextarea.focus();
+            inquiryRichWriter.focus();
         });
     }
 
@@ -3161,6 +3871,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const essayTimerBtn = document.getElementById('essay-timer-btn');
     const essayTimerDisplay = document.getElementById('essay-timer-display');
     const essayTextarea = document.getElementById('essay-writing-textarea');
+    const essayRichWriter = createAdminRichWriter({
+        textarea: essayTextarea,
+        getStorageKey: () => getCurrentEssayStorageKey(),
+        onSync: () => updateEssayWordState(),
+        isEssay: true
+    });
     const essayWcEl = document.getElementById('essay-writing-wc');
     const essayStatusEl = document.getElementById('essay-writing-status');
     const essaySubmitBtn = document.getElementById('essay-submit-btn');
@@ -3281,7 +3997,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (essayCurrentLevelTag) {
-            essayCurrentLevelTag.textContent = currentEssayLevel === 'B2' ? ' · Level B2' : ' · Level B1';
+            essayCurrentLevelTag.textContent = currentEssayLevel === 'B2' ? ' - Level B2' : ' - Level B1';
         }
     }
 
@@ -3301,11 +4017,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (hasSubmitted) {
                 essayStatusEl.textContent = canSubmit
                     ? `✓ Đã nộp cho Giáo viên (${wc} từ)`
-                    : `${wc}/${minW} từ · cần thêm ${needed} từ để nộp bản sửa mới`;
+                    : `${wc}/${minW} từ - cần thêm ${needed} từ để nộp bản sửa mới`;
             } else {
                 essayStatusEl.textContent = canSubmit
-                    ? `✓ ${wc}/${minW} từ · Đủ độ dài — bấm Nộp bài để gửi Giáo viên`
-                    : `${wc}/${minW} từ · cần thêm ${needed} từ`;
+                    ? `✓ ${wc}/${minW} từ - Đủ độ dài — bấm Nộp bài để gửi Giáo viên`
+                    : `${wc}/${minW} từ - cần thêm ${needed} từ`;
             }
             essayStatusEl.classList.toggle('ready', canSubmit || hasSubmitted);
         }
@@ -3353,6 +4069,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 savedDraft = cloudSub.content;
             }
             essayTextarea.value = savedDraft;
+            essayRichWriter.setFromTextarea(getCurrentEssayStorageKey());
             updateEssayWordState();
         }
 
@@ -3451,6 +4168,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (savedEssay) {
                 essayTextarea.value = savedEssay;
             }
+            essayRichWriter.setFromTextarea(getCurrentEssayStorageKey());
         } catch (e) {}
         updateEssayWordState();
 
@@ -3490,7 +4208,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const lessonTitle = getCatalogLessonTitle(lessonId, `Task 02 · ${topic.title}`);
+            const lessonTitle = getCatalogLessonTitle(lessonId, `Task 02 - ${topic.title}`);
 
             authState.isSubmittingEssay = true;
             essaySubmitBtn.disabled = true;
@@ -3536,14 +4254,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
             }
-            essayTextarea.value = '';
             const essayKey = getCurrentEssayStorageKey();
+            essayRichWriter.clear(essayKey);
             draftSaver.cancel(essayKey);
             try {
                 localStorage.removeItem(essayKey);
             } catch (e) {}
             updateEssayWordState();
-            essayTextarea.focus();
+            essayRichWriter.focus();
         });
     }
 
@@ -3632,15 +4350,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     const isUnread = !r.student_seen_at;
                     const title = getCatalogLessonTitle(r.lesson_id, r.lesson_title || r.lesson_id);
                     const errCount = Array.isArray(r.review_json && r.review_json.corrections) ? r.review_json.corrections.length : 0;
-                    const bandText = (r.review_json && r.review_json.estimated_band) ? ` · ${r.review_json.estimated_band}` : '';
+                    const bandText = (r.review_json && r.review_json.estimated_band) ? ` - ${r.review_json.estimated_band}` : '';
                     return `
                         <button type="button" class="notif-item-btn ${isUnread ? 'unread' : ''}" data-open-review-lesson="${esc(r.lesson_id)}">
                             <div class="notif-item-top">
-                                <span class="notif-item-tag ${isUnread ? 'new-dot' : ''}">${isUnread ? 'Mới · Đã có bài sửa' : '✓ Đã trả bài sửa'}</span>
+                                <span class="notif-item-tag ${isUnread ? 'new-dot' : ''}">${isUnread ? 'Mới - Đã có bài sửa' : '✓ Đã trả bài sửa'}</span>
                                 <span class="notif-item-time">${esc(fmtTime(r.release_at))}</span>
                             </div>
                             <div class="notif-item-title">${esc(title)}</div>
-                            <div class="notif-item-sub">Level ${esc(r.target_level || 'B1')}${esc(bandText)} · ${errCount} điểm cần chỉnh · Xem chi tiết →</div>
+                            <div class="notif-item-sub">Level ${esc(r.target_level || 'B1')}${esc(bandText)} - ${errCount} điểm cần chỉnh - Xem chi tiết →</div>
                         </button>
                     `;
                 }).join('');
@@ -3814,7 +4532,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (headingEl) {
-            headingEl.textContent = `Bài viết đã nộp · ${subs.length} bài`;
+            headingEl.textContent = `Bài viết đã nộp - ${subs.length} bài`;
         }
         if (!listEl || !CLOUD) return;
 
@@ -3849,7 +4567,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (rev) {
                 const isUnread = !rev.student_seen_at;
                 statusPillHtml = isUnread
-                    ? `<span class="notif-item-tag new-dot">Mới · Đã có bài sửa</span>`
+                    ? `<span class="notif-item-tag new-dot">Mới - Đã có bài sửa</span>`
                     : `<span class="notif-item-tag">✅ Đã có bài sửa</span>`;
             } else {
                 const relAt = sub.ai_release_at || (sub.submitted_at ? new Date(new Date(sub.submitted_at).getTime() + 6 * 60 * 60 * 1000).toISOString() : '');
@@ -3864,7 +4582,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="ej-history-left">
                         <div class="ej-history-badges">
                             <span style="font-size:11px;font-weight:700;padding:2px 8px;${taskBadgeStyle}">${isTask1 ? 'Task 01' : 'Task 02'}</span>
-                            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:2px 7px;background:#F4F4F5;color:#18181B;">Level ${esc(sub.target_level || 'B1')} · ${sub.word_count || 0} từ</span>
+                            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:2px 7px;background:#F4F4F5;color:#18181B;">Level ${esc(sub.target_level || 'B1')} - ${sub.word_count || 0} từ</span>
                             ${statusPillHtml}
                             ${hasTeacherGrade ? `<span class="notif-item-tag">👨‍🏫 GV đã nhận xét${sub.teacher_score ? ` (${esc(sub.teacher_score)})` : ''}</span>` : ''}
                         </div>
@@ -3905,6 +4623,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         renderNotificationBell();
         renderMySubmissionsView();
+        syncAllAdminRichEditors();
     }
 
     function hydrateWritingViewsFromCloud() {
@@ -3935,6 +4654,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (adviceTextarea) adviceTextarea.value = '';
         if (inquiryTextarea) inquiryTextarea.value = '';
         if (essayTextarea) essayTextarea.value = '';
+        syncAllAdminRichEditors();
         isCurrentAdviceSubmitted = false;
         isCurrentInquirySubmitted = false;
         syncAdviceSampleUI(false);
@@ -3975,7 +4695,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="auth-wrapper">
                 <div class="auth-card-box">
                     <div style="margin-bottom:10px;">
-                        <span class="auth-badge-tag">VSTEP WRITING · TÀI KHOẢN HỌC VIÊN</span>
+                        <span class="auth-badge-tag">VSTEP WRITING - TÀI KHOẢN HỌC VIÊN</span>
                     </div>
 
                     <h1 style="font-size:22px;font-weight:900;color:#18181B;margin-bottom:6px;">
@@ -4056,7 +4776,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="auth-wrapper">
                 <div class="auth-card-box">
                     <div style="margin-bottom:10px;">
-                        <span class="auth-badge-tag">THÔNG TIN HỌC VIÊN · BẮT BUỘC</span>
+                        <span class="auth-badge-tag">THÔNG TIN HỌC VIÊN - BẮT BUỘC</span>
                     </div>
 
                     <h1 style="font-size:21px;font-weight:900;color:#18181B;margin-bottom:6px;">

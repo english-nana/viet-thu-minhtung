@@ -5,27 +5,27 @@
 (function () {
   const CLASS_LIST = ["ONB204", "CB221", "CB212", "ONB102", "ONB104", "B210", "C1"];
   const LESSONS_CATALOG = [
-    { id: "advice-1", taskType: "task1", title: "Task 01 · Đề 1: Mua hàng online lần đầu (Jay)" },
-    { id: "advice-2", taskType: "task1", title: "Task 01 · Đề 2: Thông tin hội thảo công ty (Carol)" },
-    { id: "advice-3", taskType: "task1", title: "Task 01 · Đề 3: Kinh nghiệm du lịch Hà Nội (Jane)" },
-    { id: "advice-4", taskType: "task1", title: "Task 01 · Đề 4: Kinh nghiệm chuyển nhà mới (Alex)" },
-    { id: "advice-5", taskType: "task1", title: "Task 01 · Đề 5: Chọn hoạt động mùa hè (Harry)" },
-    { id: "inquiry-1", taskType: "task1", title: "Task 01 · Hỏi thông tin 1: Vé xem hòa nhạc (Alex)" },
-    { id: "inquiry-2", taskType: "task1", title: "Task 01 · Hỏi thông tin 2: Mua thú cưng tại cửa hàng (Pet Shop)" },
-    { id: "inquiry-3", taskType: "task1", title: "Task 01 · Hỏi thông tin 3: Tổ chức tiệc sinh nhật (Sarah)" },
-    { id: "inquiry-4", taskType: "task1", title: "Task 01 · Hỏi thông tin 4: Khóa tiếng Anh mùa hè ở London" },
-    { id: "children-devices", taskType: "task2", title: "Task 02 · Chủ đề 1: Trẻ em & Thiết bị điện tử" },
-    { id: "fast-fashion", taskType: "task2", title: "Task 02 · Chủ đề 2: Thời trang nhanh & Môi trường" },
-    { id: "choosing-job", taskType: "task2", title: "Task 02 · Chủ đề 3: Lựa chọn công việc & Sự hài lòng" },
-    { id: "self-employment", taskType: "task2", title: "Task 02 · Chủ đề 4: Tự kinh doanh / Tự làm chủ" },
-    { id: "traffic-lights", taskType: "task2", title: "Task 02 · Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc" },
-    { id: "tourism-growth", taskType: "task2", title: "Task 02 · Chủ đề 6: Sự gia tăng lượng khách du lịch" },
-    { id: "leaving-cities", taskType: "task2", title: "Task 02 · Chủ đề 7: Người trẻ bỏ phố về quê" },
-    { id: "job-hopping", taskType: "task2", title: "Task 02 · Chủ đề 8: Người trẻ thường xuyên nhảy việc" },
-    { id: "parent-teen-conflicts", taskType: "task2", title: "Task 02 · Chủ đề 9: Xung đột giữa cha mẹ và con tuổi teen" },
-    { id: "youth-stress", taskType: "task2", title: "Task 02 · Chủ đề 10: Nguyên nhân gây căng thẳng ở người trẻ" },
-    { id: "elderly-technology", taskType: "task2", title: "Task 02 · Chủ đề 11: Người cao tuổi với Điện thoại & Internet" },
-    { id: "glass-office-buildings", taskType: "task2", title: "Task 02 · Chủ đề 12: Tác động của tòa nhà văn phòng kính" }
+    { id: "advice-1", taskType: "task1", title: "Task 01 - Đề 1: Mua hàng online lần đầu (Jay)" },
+    { id: "advice-2", taskType: "task1", title: "Task 01 - Đề 2: Thông tin hội thảo công ty (Carol)" },
+    { id: "advice-3", taskType: "task1", title: "Task 01 - Đề 3: Kinh nghiệm du lịch Hà Nội (Jane)" },
+    { id: "advice-4", taskType: "task1", title: "Task 01 - Đề 4: Kinh nghiệm chuyển nhà mới (Alex)" },
+    { id: "advice-5", taskType: "task1", title: "Task 01 - Đề 5: Chọn hoạt động mùa hè (Harry)" },
+    { id: "inquiry-1", taskType: "task1", title: "Task 01 - Hỏi thông tin 1: Vé xem hòa nhạc (Alex)" },
+    { id: "inquiry-2", taskType: "task1", title: "Task 01 - Hỏi thông tin 2: Mua thú cưng tại cửa hàng (Pet Shop)" },
+    { id: "inquiry-3", taskType: "task1", title: "Task 01 - Hỏi thông tin 3: Tổ chức tiệc sinh nhật (Sarah)" },
+    { id: "inquiry-4", taskType: "task1", title: "Task 01 - Hỏi thông tin 4: Khóa tiếng Anh mùa hè ở London" },
+    { id: "children-devices", taskType: "task2", title: "Task 02 - Chủ đề 1: Trẻ em & Thiết bị điện tử" },
+    { id: "fast-fashion", taskType: "task2", title: "Task 02 - Chủ đề 2: Thời trang nhanh & Môi trường" },
+    { id: "choosing-job", taskType: "task2", title: "Task 02 - Chủ đề 3: Lựa chọn công việc & Sự hài lòng" },
+    { id: "self-employment", taskType: "task2", title: "Task 02 - Chủ đề 4: Tự kinh doanh / Tự làm chủ" },
+    { id: "traffic-lights", taskType: "task2", title: "Task 02 - Chủ đề 5: Bỏ đèn giao thông tại ngã tư đông đúc" },
+    { id: "tourism-growth", taskType: "task2", title: "Task 02 - Chủ đề 6: Sự gia tăng lượng khách du lịch" },
+    { id: "leaving-cities", taskType: "task2", title: "Task 02 - Chủ đề 7: Người trẻ bỏ phố về quê" },
+    { id: "job-hopping", taskType: "task2", title: "Task 02 - Chủ đề 8: Người trẻ thường xuyên nhảy việc" },
+    { id: "parent-teen-conflicts", taskType: "task2", title: "Task 02 - Chủ đề 9: Xung đột giữa cha mẹ và con tuổi teen" },
+    { id: "youth-stress", taskType: "task2", title: "Task 02 - Chủ đề 10: Nguyên nhân gây căng thẳng ở người trẻ" },
+    { id: "elderly-technology", taskType: "task2", title: "Task 02 - Chủ đề 11: Người cao tuổi với Điện thoại & Internet" },
+    { id: "glass-office-buildings", taskType: "task2", title: "Task 02 - Chủ đề 12: Tác động của tòa nhà văn phòng kính" }
   ];
 
   let cachedClient = null;

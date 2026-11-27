@@ -13,13 +13,13 @@
     href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="./style.css?v=4.6" />
+  <link rel="stylesheet" href="./style.css?v=4.7" />
 </head>
 <body>
   <div id="teacher-app"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./supabase-config.js?v=4.6"></script>
-  <script src="./supabase-client.js?v=4.10"></script>
+  <script src="./supabase-client.js?v=4.11"></script>
   <script>
     (function () {
       const CLOUD = window.WritingCloud;
@@ -28,8 +28,8 @@
       const RELEASE_HOURS = 6;
 
       const TASKS_CATALOG = [
-        { id: "task1", label: "Task 01 · Viết Thư", shortLabel: "Task 01" },
-        { id: "task2", label: "Task 02 · Viết Luận", shortLabel: "Task 02" }
+        { id: "task1", label: "Task 01 - Viết Thư", shortLabel: "Task 01" },
+        { id: "task2", label: "Task 02 - Viết Luận", shortLabel: "Task 02" }
       ];
 
       const LEVEL_FILTER_OPTIONS = [
@@ -865,7 +865,7 @@
           <div class="auth-wrapper">
             <div class="auth-card-box">
               <div style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                <span class="auth-badge-tag green">TRANG GIÁO VIÊN · VSTEP WRITING</span>
+                <span class="auth-badge-tag green">TRANG GIÁO VIÊN - VSTEP WRITING</span>
               </div>
               <h1 style="font-size:22px;font-weight:900;color:#18181B;margin-bottom:6px;">
                 Đăng nhập Quản trị Giáo viên
@@ -1057,7 +1057,7 @@
         const filteredStudents = getFilteredStudents();
         const totalLessonsInScope = getLessonsTotalForScope();
         const filterBarHtml = renderSharedFilterBar(
-          `Danh sách học viên · <strong>${filteredStudents.length}</strong> / ${tState.students.length}`,
+          `Danh sách học viên - <strong>${filteredStudents.length}</strong> / ${tState.students.length}`,
           false
         );
 
@@ -1160,7 +1160,7 @@
           </div>
 
           ${renderSharedFilterBar(
-            `Bài viết của <strong>${escapeHtml(studentObj.name)}</strong> · <strong>${studentSubs.length}</strong> bài`,
+            `Bài viết của <strong>${escapeHtml(studentObj.name)}</strong> - <strong>${studentSubs.length}</strong> bài`,
             true
           )}
 
@@ -1202,9 +1202,9 @@
 
                     let statusHtml = `<span style="font-size:12.5px;color:#52525B;">Chưa có bài sửa chi tiết AI.</span>`;
                     if (hasReadyReview && isWaitingRelease) {
-                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đã chấm xong · Hẹn trả lúc ${escapeHtml(CLOUD.formatDateTime(rev.release_at))} (còn ${escapeHtml(remain)})</span>`;
+                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#92400E;">⏳ Đã chấm xong - Hẹn trả lúc ${escapeHtml(CLOUD.formatDateTime(rev.release_at))} (còn ${escapeHtml(remain)})</span>`;
                     } else if (hasReadyReview) {
-                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#166534;">✅ Đã trả bài sửa (${escapeHtml(CLOUD.formatDateTime(rev.release_at))}) · ${rev.student_seen_at ? "✓ Học viên đã đọc" : "● Học viên chưa đọc"}</span>`;
+                      statusHtml = `<span style="font-size:12.5px;font-weight:700;color:#166534;">✅ Đã trả bài sửa (${escapeHtml(CLOUD.formatDateTime(rev.release_at))}) - ${rev.student_seen_at ? "✓ Học viên đã đọc" : "● Học viên chưa đọc"}</span>`;
                     } else if (rev && rev.status === "error") {
                       const tries = rev.retry_count || 1;
                       const errDetail = rev.error_message
@@ -1223,7 +1223,7 @@
                     const scoreVal = draft ? draft.score : sub.teacherScore;
                     const fbVal = draft ? draft.feedback : sub.teacherFeedback;
                     const isDetailsOpen = tState.openDetailsSubIds.has(sub.submissionId);
-                    const errCountText = errCount !== null ? `${errCount} lỗi · ` : "";
+                    const errCountText = errCount !== null ? `${errCount} lỗi - ` : "";
 
                     return `
                       <div class="submission-review-card">
@@ -1236,7 +1236,7 @@
                               ${escapeHtml(sub.lessonTitle)}
                             </span>
                             <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;font-weight:700;color:#27272A;background:#F4F4F5;padding:2px 8px;border-radius:4px;">
-                              Level ${escapeHtml(sub.targetLevel)} · ${sub.wordCount} từ
+                              Level ${escapeHtml(sub.targetLevel)} - ${sub.wordCount} từ
                             </span>
                             ${
                               sub.evaluatedBand
@@ -1289,7 +1289,7 @@
                             ? `
                               <details class="teacher-ai-details" data-review-details="${escapeHtml(sub.submissionId)}" ${isDetailsOpen ? "open" : ""}>
                                 <summary>
-                                  📝 Xem chi tiết bài sửa (${errCountText}Level ${escapeHtml(rev.target_level || sub.targetLevel)}${sub.evaluatedBand ? ` · ${escapeHtml(sub.evaluatedBand)}` : ""})
+                                  📝 Xem chi tiết bài sửa (${errCountText}Level ${escapeHtml(rev.target_level || sub.targetLevel)}${sub.evaluatedBand ? ` - ${escapeHtml(sub.evaluatedBand)}` : ""})
                                 </summary>
                                 ${
                                   reviewJson
@@ -1307,7 +1307,7 @@
                           <input
                             type="text"
                             class="form-input grade-score-input"
-                            placeholder="Điểm / Mức (VD: 7.5 · B2)"
+                            placeholder="Điểm / Mức (VD: 7.5 - B2)"
                             value="${escapeHtml(scoreVal)}"
                             id="inp-score-${escapeHtml(sub.submissionId)}"
                           />
@@ -1378,7 +1378,7 @@
                   <div class="student-info-row">
                     <span class="student-info-label">Bài đã nộp</span>
                     <span class="student-info-value">
-                      <strong>${st.submittedCount}</strong> bài (Task 1: ${st.task1Count} · Task 2: ${st.task2Count})
+                      <strong>${st.submittedCount}</strong> bài (Task 1: ${st.task1Count} - Task 2: ${st.task2Count})
                     </span>
                   </div>
 

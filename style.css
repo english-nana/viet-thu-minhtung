@@ -3842,6 +3842,9 @@ footer {
 .topbar-logout-hint {
     color: #71717A;
     font-weight: 500;
+    border-left: 1px solid #E4E4E7;
+    padding-left: 7px;
+    margin-left: 2px;
 }
 
 /* Teacher Feedback Display Box on Student Writing Screen */
@@ -6280,4 +6283,98 @@ footer {
     .student-info-value {
         text-align: left;
     }
+}
+
+/* --- Admin Rich Writing Mode (Black English / Red Vietnamese Translation) --- */
+.admin-rich-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #E4E4E7;
+    background: #FAFAFA;
+}
+
+.admin-color-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #D4D4D8;
+    background: #FFFFFF;
+    color: #18181B;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.admin-color-toggle-btn:hover {
+    border-color: #18181B;
+}
+
+.admin-color-toggle-btn.is-red {
+    border-color: #FECACA;
+    background: #FEF2F2;
+    color: #DC2626;
+}
+
+.admin-color-toggle-btn.is-red:hover {
+    border-color: #DC2626;
+}
+
+.admin-color-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #18181B;
+    flex-shrink: 0;
+}
+
+.admin-color-toggle-btn.is-red .admin-color-dot {
+    background: #DC2626;
+}
+
+.admin-rich-hint {
+    font-size: 12px;
+    color: #71717A;
+}
+
+.admin-rich-editor {
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    cursor: text;
+    position: relative;
+}
+
+.admin-rich-editor.is-empty::before {
+    content: attr(data-placeholder);
+    color: #A1A1AA;
+    pointer-events: none;
+    white-space: pre-wrap;
+}
+
+.admin-rich-editor.is-red-mode {
+    border-color: #FCA5A5 !important;
+}
+
+.admin-rich-editor.is-red-mode:focus {
+    border-color: #DC2626 !important;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.12) !important;
+}
+
+.admin-seg-black {
+    color: #18181B !important;
+}
+
+.admin-seg-red {
+    color: #DC2626 !important;
 }
